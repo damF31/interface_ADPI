@@ -1,0 +1,49 @@
+# Commentaire
+Ti hcp avec O en  substitution et  en insertion
+(sites inter. = octa + tetra specifies dans cet ordre)
+Ti = 1 - O = 2
+
+# Base du nom des fichiers
+Ti_1000K
+
+# Nombres de types chimiques
+2 1
+
+# Nombre de sous-réseaux
+3
+
+# Sous-réseaux interstitiels
+n
+
+# Interstitiels intrinsèques
+n
+
+# Sous-réseaux occupés
+0
+
+# Sites par maille
+['2', '2', '4']
+
+# Défauts complexes
+n
+
+# Température
+1000.000
+
+# Pression externe
+0.000
+
+# Énergies de référence
+['0.00', '0.00']
+
+# Grandeurs thermodynamiques
+a
+
+# Énergie libre par atome
+t
+
+# Type de calcul
+muVT
+
+# DP chargés
+0

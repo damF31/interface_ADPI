@@ -1,0 +1,969 @@
+C     ==================================================================
+C     I     Approximation des Défauts Ponctuels Indépendants (ADPI)    I
+C     I             pour la description thermodynamique                I
+C     I                 d'un alliage/composé ordonné                   I
+C     I             (composé intermétallique, minéral,...)             I
+C     I        avec un, deux ou trois éléments intrinsèques            I
+C     I                  et des nombres quelconques                    I
+C     I          de sous-réseaux et d'éléments d'addition              I
+C     ==================================================================
+C     I                                                                I
+C     I Grandeurs physiques calculées :                                I
+C     I -----------------------------                                  I
+C     I * quantités de défauts ponctuels                               I
+C     I * quantités thermodynamiques                                   I
+C     I (énergie libre, entropie, potentiels chimiques)                I
+C     I en fonction des variables thermodynamiques intensives :        I
+C     I composition = écart à la stoechiométrie, température           I
+C     I (et éventuellement pression)                                   I
+C     I                                                                I
+C     I Les r1 premiers sous-réseaux contiennent l'espèce 1            I
+C     I les r2 suivants l'espèce 2                                     I
+C     I les r3 suivants l'espèce 3                                     I
+C     I dans l'état fondamental sans défaut                            I
+C     I                                                                I
+C     I Aucun sous-réseau ne contient les éléments d'addition          I
+C     I (i>3) à l'état fondamental                                     I
+C     I                                                                I
+C     I Les sous-réseaux d'indices > r1 + r2 + r3 sont interstitiels   I
+C     I                                                                I
+C     I On note p(r) le nombre de sites du sous-réseau r par maille    I
+C     I                                                                I
+C     I                 ============================                   I
+C     I                 Trois modes de calcul ADPI :                   I
+C     I                 ============================                   I
+C     I                                                                I
+C     I --------------------------------------------------             I
+C     I Mode muVT --> ensemble grand canonique (mu(i),V,T)             I
+C     I --------------------------------------------------             I
+C     I                                                                I
+C     I Relation de Gibbs-Duhem approchée pour la pression :           I
+C     I à cause de cette relation P(mu(i),T) approchée,                I
+C     I le balayage en potentiels chimiques résultant induit           I
+C     I  une (légère) dérive en pression par rapport à la consigne.    I
+C     I -> ajout d'une possibilité de boucle d'autocohérence sur mu(1) I
+C     I pour éviter cette dérive en P.                                 I
+C     I                                                                I
+C     I En mode muVT, le programme ADPI effectue :                     I
+C     I A) à partir de la relation de Gibbs-Duhem, le calcul approché  I
+C     I    de la valeur de N(1)*mu(1) + N(2)*mu(2) + N(3)*mu(3)        I
+C     I    correspondant à la pression prescrite                       I
+C     I                                                                I
+C     I    Attention : il s'agit de la pression externe                I
+C     I                exercée sur le système par l'extérieur          I
+C     I                                                                I
+C     I B) un balayage en écarts de potentiels chimiques               I
+C     I d_mu_i = mu(i_réf) - mu(i) (i = 1, 2 ou 3 <> i_réf)            I
+C     I             et en mu(i>3)                                      I
+C     I                                                                I
+C     I C) pour chaque valeur de d_mu_i et mu(i>3)                     I
+C     I       l'écriture dans les fichiers ".adpi" des grandeurs :     I
+C     I     (i) composition                                            I
+C     I    (ii) quantités de défauts ponctuels x_déf, avec déf =       I
+C     I  1(r) pour r1 < r <= r1 + r2 + r3                              I
+C     I         ou r > r1 + r2 + r3 (1 interstitiel),                  I
+C     I  2(r) pour r <= r1 ou r1 + r2 < r <= r1 + r2 + r3              I
+C     I         ou r > r1 + r2 + r3 (2 interstitiel),                  I
+C     I  3(r) pour r <= r1 + r2                                        I
+C     I         ou r > r1 + r2 + r3 (3 interstitiel),                  I
+C     I  L(r) pour r <= r1 + r2 + r3                                   I
+C     I  i(r) pour tout r                                              I
+C     I   (iii) énergie, volume, entropie de configuration             I
+C     I         et enthalpie libre par atome ou par maille             I
+C     I                                                                I
+C     I Possibilité de fenêtres en composition pour l'écriture         I
+C     I                                                                I
+C     I Il a été ajouté ultérieurement                                 I
+C     I la possibilité d'une boucle d'autocohérence sur mu(1)          I
+C     I pour compenser la dérive en P                                  I
+C     I induite par la relation approchée P(mu(i),T).                  I
+C     I                                                                I
+C     I -------------------------------------                          I
+C     I Mode NPT=0 --> ensemble (N(i),P,T=0K)                          I
+C     I -------------------------------------                          I
+C     I                                                                I
+C     I Minimisation de H (méthode du simplexe)                        I
+C     I par rapport aux quantités de DP                                I
+C     I sous les contraintes de quantités de matière constantes        I
+C     I                                                                I
+C     I Variantes disponibles pour le mode NPT=0 : P/p, x              I
+C     I                                                                I
+C     I --------------------------------                               I
+C     I Mode NPT --> ensemble (N(i),P,T)                               I
+C     I --------------------------------                               I
+C     I                                                                I
+C     I Résolution par la méthode de Newton-Raphson (NR)               I
+C     I du système non linéaire d'inconnues ( M , x_d )                I
+C     I correspondant à la minimisation de l'enthalpie libre           I
+C     I                                                                I
+C     I Variantes disponibles pour le mode NPT : P/p, T, x             I
+C     I                                                                I
+C     I Remarques :                                                    I
+C     I un calcul NPT peut diverger si les paramètres sont mal choisis I
+C     I => penser à jouer sur les paramètres suivants :                I
+C     I * ordre (croissant / décroissant) du balayage en T ou x        I
+C     I * finesse du balayage (nombre de points)                       I
+C     I * valeurs initiales des inconnues                              I
+C     I * fréquence de calcul de la matrice jacobienne                 I
+C     I et également (plus rare)                                       I
+C     I * nombre maximal d'itérations de NR                            I
+C     I * précision pour l'arrêt de l'algorithme de NR                 I
+C     I                                                                I
+C     I ====================================================           I
+C     I          Possibilités de prise en compte :                     I
+C     I * de DP complexes (approximative, en muVT seulement)           I
+C     I * de DP chargés (en muVT"point" seulement)                     I
+C     I ====================================================           I
+C     I                                                                I
+C     ==================================================================
+
+########################
+#####PARAMETRES GENERAUX
+########################
+
+-----------
+Commentaire
+========================================================================
+DP dans Cr23C6 en SC111 (Cr92C24)
+Espèce 1 = Cr - Espèce 2 = C
+Effet de C interstitiel (sites 4b et 24d)
+Ordre des sous-réseaux : 
+sr_1 = Cr4a, sr_2 = Cr8c, sr_3 = Cr32f, sr_4 = Cr48h, sr_5 = C24e
+sr_6 = i4b, sr_7 = i24d
+02/10/19 - Saints Anges Gardiens 
+========================================================================
+
+----------------------------------
+Base du nom des fichiers de sortie
+========================================================================
+Cr92C24_Ci4b_Ci24d_800K
+========================================================================
+
+------------------------------------------------------
+Nombres de types chimiques
+------------------------------------------------------
+total		intrinsèque (hors éléments d'addition)
+========================================================================
+2		2
+========================================================================
+
+-----------------------------------------------------------
+Nombre de sous-réseaux
+(entendu au sens d'ensemble d'atomes de même environnement)
+========================================================================
+7
+========================================================================
+
+---------------------------------------------------
+Présence de sous-réseaux interstitiels (O/o ou N/n)
+========================================================================
+o
+========================================================================
+
+-----------------------------------------------------------
+Prise en compte des interstitiels intrinsèques (O/o ou N/n)
+========================================================================
+o
+========================================================================
+
+------------------------------------------------------------
+Nombres de sous-réseaux occupés par les espèces intrinsèques
+========================================================================
+4       1
+======================================================================== 
+
+--------------------------------------------------
+Nombre de sites par maille pour chaque sous-réseau
+========================================================================
+4       8       32      48      24	4	24
+========================================================================
+
+-----------------------------
+Présence de défauts complexes 
+========================================================================
+o     
+========================================================================
+
+----------------------------------------------------------------------
+Température (K) (présente mais inutile en modes NPT=0 et NPT(T/xT/Tx))
+========================================================================
+800.                                                                    
+========================================================================
+
+-----------------------
+Pression externe (kbar)
+========================================================================
+0.
+========================================================================
+
+------------------------------------------------------------------------
+Energies (libres) de référence des diverses espèces chimiques (eV/atome)
+========================================================================
+0.0     0.0     0.0     0.0     0.0
+========================================================================
+
+-----------------------------------------------
+Choix d'écriture des grandeurs thermodynamiques 
+par atome (A/a) ou par maille (M/m)
+========================================================================
+m
+========================================================================
+
+----------------------------------------------------
+Indicateur d'écriture de l'énergie libre par atome :
+énergie libre totale (T/t) ou de formation (F/f)
+========================================================================
+t
+========================================================================
+
+-----------------------------------
+Mode de calcul (muVT, NPT ou NPT=0)
+========================================================================
+muVT
+========================================================================
+
+-----------------------------------------------
+Indicateur (0/1) de DP chargés (mode muVT seul)
+========================================================================
+1
+========================================================================
+
+========================================================================
+############Sous-section générale relative aux DP chargés###############
+#########(lue seulement si l'indicateur de DP chargés vaut 1)###########
+========================================================================
+
+---------------------------------------------------------------
+Nombre maximum d'états de chargés considérés
+et type de calcul (1=balayage en mu_e, 2=neutralité électrique)
+========================================================================
+12                              2
+========================================================================
+
+------------------------------------------
+Energies du maximum de la bande de valence
+et du minimum de la bande de conduction (eV)
+========================================================================
+1.023   6.078
+========================================================================
+
+---------------------------------------------------
+Potentiel chimique électronique (eV) :
+valeur initiale (mode 2) ou minimale (mode 1),
+puis incrément (mode 1) et valeur maximale (mode 1)
+========================================================================
+1.                          0.05                            2.
+========================================================================
+
+--------------------------------------------------------
+Répertoire contenant le fichier de densité d'états (DdE)
+========================================================================
+/home/besson/CAO_CACO3/CACO3/
+========================================================================
+
+--------------
+Fichier de DdE
+========================================================================
+DOSCAR_CaCO3_SC333
+========================================================================
+
+--------------------------------------------------------
+Nombre de mailles de la SC utilisée pour calculer la DdE
+========================================================================
+27
+========================================================================
+
+-------------------------------------------------------------------
+Algorithme "NR élec" (champs lus en mode 2 seulement) :
+(i) précision d'arrêt, (ii) nombre maximum de pas,
+(iii) indicateur de réinitialisation de mu_e entre deux pas de mu_i
+(0 : jamais ; 1 : si non conv. au mu_i précédent ; 2 : toujours)
+========================================================================
+1.D-20   	 200		0
+========================================================================
+
+#################################################
+#####PARAMETRES RELATIFS A UN CALCUL NPT ou NPT=0###Champs à inclure en mode NPT ou NPT=0
+#################################################
+
+----------------------------------------------------------------------
+Indicateur de type de calcul NPT(=0)
+* P/p : point (T,x) fixés (modes NPT et NPT=0)
+* T : balayage en température (mode NPT)
+* x : balayage en composition (modes NPT et NPT=0)
+* Tx et xT  : doubles balayages en température et composition
+ --> boucle externe sur T ou x pour Tx ou xT respectivement (mode NPT)
+========================================================================
+xT
+========================================================================
+
+---------------------------------------------------------------------------------------
+Cas d'un calcul en un point de composition :
+fractions atomiques de l'alliage (la somme doit valoir 1) - NE PAS METTRE DE TABULATION
+   --> champs à inclure seulement dans les cas NPT(/=0)(P/p) et NPT(T)
+========================================================================
+0.21     0.60     0.19
+========================================================================
+
+-------------------------------------------------------------------------
+Cas d'un balayage (r,theta) en composition autour de la stoechiométrie :
+nombre de pas angulaires        "r" maximal             nombre de pas
+entre 0 et 2 pi                 (entre 0 et 1)          entre 0 et r max.
+   --> champs à inclure seulement dans le cas NPT=0 et pour balayage "x"
+========================================================================
+10000                           0.05                    1000
+========================================================================
+
+----------------------------------------------------------
+Nombre de pas en fraction atomique pour l'espèce choisie
+   --> champ à inclure seulement dans les cas NPT(x/Tx/xT)
+========================================================================
+200
+========================================================================
+
+----------------------------------------------------------
+Nombre de pas en T
+   --> champ à inclure seulement dans les cas NPT(T/Tx/xT)
+========================================================================
+200
+========================================================================
+
+################################################
+#####PARAMETRES RELATIFS A UN CALCUL muVT ou NPT###Champs à inclure en mode muVT ou NPT
+################################################			
+
+-----------------------------------------------------------------------
+Coefficients (a,b) des N_TYP - 2 contraintes sur les fractions atomiques
+sous la forme a(k,i)x(i) + b(k) = 0 (une contrainte par ligne           
+=> tableau de N_TYP - 2 lignes, N_TYP + 1 colonnes)                     
+ --> champs à inclure ssi N_TYP > 2, en NPT(x/Tx/xT) comme en muVT,
+   y compris en muVT lorsque le filtre "fenêtres" n'est pas sélectionné
+   (cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+   bien que ces champs soient alors inutilisés dans ce cas.
+========================================================================
+0.245           -0.755          0.       0.        0.
+0.		0.              1.       0.       -0.02                 
+========================================================================
+                                                                        
+------------------------------------------------------------------------
+Elément dont on étudie l'effet de l'enrichissement                      
+(toutes les autres fractions atomiques étant fixées par les contraintes)
+ --> champ à inclure (i) en NPT(x/Tx/xT), (ii) en muVT si N_TYP > 2
+   y compris en muVT lorsque le filtre "fenêtres" n'est pas sélectionné 
+   (cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+   bien que ce champ soit alors inutilisé dans ce cas.
+========================================================================
+4                                                                       
+========================================================================
+
+------------------------------------------------------------------------
+Valeurs extrémales du domaine de fraction atomique
+pour l'élément spécifié (dont on étudie l'enrichissement)               
+ --> champs à inclure (i) en NPT(x/Tx/xT), (ii) en muVT si N_TYP > 2
+   y compris en muVT lorsque le filtre "fenêtres" n'est pas sélectionné
+   (cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+   bien que ces champs soient alors inutilisés dans ce cas.
+========================================================================
+0.      0.05                                                            
+========================================================================
+                                                                       
+############################################
+#####PARAMETRES SPECIFIQUES A UN CALCUL muVT###Champs à inclure en mode muVT
+############################################
+
+========================================================================
+##################Champs relatifs à cette section "muVT"################
+#########1) communs aux cas DP NON CHARGES et DP CHARGES (mode 2)#######
+========================================================================
+
+---------------------------------------------------------------
+Indicateur d'écriture des seuls points contenus dans la fenêtre	
+  --> champ à inclure seulement si N_TYP > 2
+========================================================================
+o
+========================================================================
+
+------------------------------------------------------------------------
+Demi-largeurs des fenêtres en composition
+pour les éléments autres que celui spécifié
+ --> champs à inclure ssi N_TYP > 2, y compris lorsque INDIC_FENETRE = n
+ (bien que ces champs soient inutilisés dans ce cas).
+========================================================================
+0.00001         0.00001
+========================================================================
+
+========================================================================
+=============Sous-section muVT(+Qmode2) relative aux balayages==========
+============en "delta_mu(intrinsèques)" et "mu(additions)"==============
+========================================================================
+
+------------------------------------
+Propriétés de la série mu(1) - mu(2)				
+------------------------------------
+Valeur initiale		Nombre			Pas
+de delta_mu (eV)   	de valeurs 	        (eV)
+========================================================================
+-5.0                        1000                     0.008
+========================================================================
+									###Zone présente seulement si éléments d'additions
+-------------------------------------					### 		         
+Propriétés de la série mu(addition 1)					###			 
+-------------------------------------					###			 
+Valeur initiale         Nombre                  Pas			###			 
+de mu(3) (eV)           de valeurs              (eV)			###			 
+========================================================================###			 
+-3.60                        500                    .0002
+========================================================================###                      
+									###                      
+-------------------------------------                                   ###                      
+Propriétés de la série mu(addition 2)                                   ###                      
+-------------------------------------                                   ###                      
+Valeur initiale         Nombre                  Pas			###                      
+de mu(4) (eV)           de valeurs              (eV)			###                      
+========================================================================###                      
+-12.1                        400                   .0007
+========================================================================###Fin de zone présente seulement si éléments d'addition
+
+========================================================================
+##################Champs relatifs à cette section "muVT"################
+####################2) spécifiques au cas DP NON CHARGES################
+========================================================================
+
+---------------------------------------------------------------
+Indicateur (INDIC_CORR=0/1) de prise en compte de la correction
+de Egc (version présente : pour un seul type de DP)
+========================================================================
+1
+========================================================================
+
+----------------------------------------------------------------
+Paramètres relatifs à la correction éventuelle
+(champs lus seulement si INIDC_CORR = 1, présence inutile sinon)
+----------------------------------------------------------------
+I_R_CORR(=s-r(DPcorr))          I_TYP_CORR(=type(DPcorr))
+X_SEUIL_CORR    A_CORR          N_EXP_CORR
+PREC_CORR       N_MAX_ITER_CORR
+========================================================================
+1                               0
+0.06            10.D0           2
+1.D-12          100000
+========================================================================
+
+-----------------------------------------------------------------
+(i) Précision pour l'arrêt de la boucle d'autocohérence sur POT_1
+(ii) Nombre maximum d'itérations pour l'arrêt de cette boucle
+(choisir N_ITER_MAX_MU_1 = 1 pour ne pas faire d'autocohérence)
+========================================================================
+1.D-8           100
+========================================================================
+
+========================================================================
+##################Champs relatifs à cette section "muVT"################
+#################3) spécifiques au cas DP CHARGES (mode 1)##############
+========================================================================
+
+---------------------------------------------------------------------
+"muVT+Q en mode 1" : spécification directe des mu_i (pas de balayage)
+Ligne 1 éventuelle : mu(2) et mu(3) (binaire ou ternaire intrinsèque)
+Ligne 2 éventuelle : mu(additions)
+========================================================================
+-5.85           -9.075
+-1.                             -2.                     -3.
+========================================================================
+
+###########################################
+#####PARAMETRES SPECIFIQUES A UN CALCUL NPT###Champs à inclure en mode NPT
+###########################################
+
+------------------------------------------------------------------
+Valeurs extrémales du domaine de température
+ --> champs à inclure en NPT(T/Tx/xT) - spécifier T_max puis T_min
+========================================================================
+2000.      100.
+========================================================================
+
+========================================================================
+################Sous-section NPT relative à l'algorithme################
+========================================================================
+
+---------------------------------------------------------------
+Nombre maximal d'itérations pour l'algorithme de Newton-Raphson
+========================================================================
+500
+========================================================================
+
+----------------------------------------------------------------
+Précision requise pour l'arrêt de l'algorithme de Newton-Raphson
+(maximum des valeurs absolues des composantes de l'écart entre deux pas)
+========================================================================
+1.D-12
+========================================================================
+
+------------------------------------------------------------
+Fréquence (nombre de pas) de calcul de la matrice jacobienne
+========================================================================
+1
+========================================================================
+
+-----------------------------------
+Valeur du paramètre alpha dans NRCG
+========================================================================
+1.D-4
+========================================================================
+
+--------------------------------------------------------------------
+NRCG : 1) indicateur à l'étape préliminaire pour "élimination de x_1<0"
+= 1 si réduction du pas suivant les seules composantes x_1(i)<0,
+= 2 si réduction de toutes les composantes du pas
+       2) valeur du coefficient de réduction
+========================================================================
+1						0.5D0
+========================================================================
+
+---------------------------------------------------------------
+Valeur minimale "lambda_min" pour la réduction du pas dans NRCG
+========================================================================
+1.D-8
+========================================================================
+
+========================================================================
+###########Sous-section NPT relative aux valeurs initiales##############
+========================================================================
+
+-----------------------------------------------------------------
+Indicateur (0/1) de lecture des valeurs initiales dans un fichier
+========================================================================
+1
+========================================================================
+
+-----------------------------------
+Nom du fichier de valeurs initiales
+========================================================================
+init_3000K_200val
+========================================================================
+
+------------------------------------------------
+Nombre de lignes du fichier de valeurs initiales
+========================================================================
+200
+========================================================================
+
+---------------------------------------------------
+log_10 des quantités initiales de défauts ponctuels
+---------------------------------------------------
+Antisites 2(r) (pour r <= r_1)
+========================================================================
+-10.
+========================================================================
+Antisites 1(r) (pour r_1 < r <= r_1 + r_2)
+========================================================================
+-10.
+========================================================================
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+-10.            -10.
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+-10.            -10.            -10.            -10.
+========================================================================
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+-10.            -10.            -10.            -10.
+========================================================================
+
+###############################################
+#####PARAMETRES DE LA SUPERCELLULE DE REFERENCE
+###############################################
+
+-------------------------------------------------------
+Energie de référence de la SC sans défaut ponctuel (eV)
+========================================================================
+-.11052254E+04
+========================================================================
+
+-------------------------------------------
+Volume de référence de la SC sans DP (A**3)
+========================================================================
+0.
+========================================================================
+
+-----------------------------------------
+Nombre de mailles contenues dans cette SC
+========================================================================
+1
+========================================================================
+
+###########################################################
+#####PARAMETRES DES SUPERCELLULES DE DP SIMPLES NON CHARGES
+###########################################################
+
+-------------------------------------------------
+Energies "brutes" des défauts ponctuels (eV)
+(= énergie de la cellule de même nombre de sites
+que la cellule de référence sans défaut ponctuel)
+-------------------------------------------------
+Antisites 2(r) (pour r <= r_1)
+========================================================================
+-.11033131E+04	-.11023474E+04	-.11014127E+04  -.11006413E+04
+========================================================================
+Antisites 1(r) (pour r_1 < r <= r_1 + r_2)
+========================================================================
+-.11017799E+04
+========================================================================
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+-.10950390E+04  -.10927498E+04	-.10936294E+04  -.10931448E+04	-.10937479E+04
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)           
+========================================================================
+0.			0.
+========================================================================
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)                           
+========================================================================
+-.11119741E+04		-.11113379E+04
+========================================================================
+
+-------------------------------------------------
+Volumes "bruts" des défauts ponctuels (eV)
+(= volume de la cellule de même nombre de sites
+que la cellule de référence sans défaut ponctuel)
+-------------------------------------------------
+Antisites 2(r) (pour r <= r_1) 
+========================================================================
+0.	0.	0.	0.
+========================================================================
+Antisites 1(r) (pour r_1 < r <= r_1 + r_2)
+========================================================================
+0.
+========================================================================
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+0.	0.	0.	0.	0.
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+0.		0.
+========================================================================
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+0.		0.
+========================================================================
+
+##############################################
+#####PARAMETRES RELATIFS AUX DEFAUTS COMPLEXES###Champs à inclure seulement si l'option "complexes" est activée
+##############################################
+
+----------------------------------------------------
+Nombre maximum de sites des complexes pris en compte
+========================================================================
+3
+========================================================================
+
+---------------------------------------------------
+Nombre de types de défauts complexes pris en compte
+========================================================================
+1
+========================================================================
+
+========================================================================
+####Caractéristiques des complexes (classés par numéros croissants)#####
+========================================================================
+
+------------------------------------------------------------------------
+Numéro          Multiplicité    Sous-réseau correspondant       Nombre
+du complexe     d'orientation   à cette multiplicité            de sites
+========================================================================
+1               3               2                               3
+========================================================================
+Numéros de sous-réseaux des sites occupés par le complexe
+========================================================================
+2       3       3                                       L(CO2)
+========================================================================
+Types chimiques du complexe sur ces sites, dans le même ordre (0 = lacune)
+========================================================================
+0       0       0
+========================================================================
+Paramètres de supercellule pour le complexe
+-------------------------------------------
+Energie (eV)            Volume (A * * 3)
+========================================================================
+-571.89164                   0.000
+========================================================================
+
+###############################################
+#####PARAMETRES RELATIFS AUX DP SIMPLES CHARGES
+#####(mode muVT seulement)
+###############################################
+
+-----------------------------------------------------
+Pour chaque DP chargé, nombre d'états de charges
+puis charge et énergie et volume "bruts" (eV et Å**3)
+(= relatifs à la cellule de même taille
+que la cellule de référence sans défaut ponctuel)
+-----------------------------------------------------
+Antisites 2(r) (pour r <= r_1)
+========================================================================
+5
+-2      -586.44383              0.
+-1      -589.60473              0.
+0       -593.03539              0.
+1       -594.30327              0.
+2       -596.68846              0.
+========================================================================
+Antisites 3(r) (pour r <= r_1)
+========================================================================
+7
+-4      -580.52540              0.
+-3      -584.89556              0.
+-2      -586.82847              0.
+-1      -587.88080              0.
+0       -589.05653              0.
+1       -590.14491              0.
+2       -591.27394              0.
+========================================================================
+Antisites 1(r) (pour r_1 < r <= r_1 + r_2)
+========================================================================
+7
+-4      -573.81105              0.
+-3      -579.17657              0.
+-2      -584.62306              0.
+-1      -586.29730              0.
+0       -587.54891              0.
+1       -588.55152              0.
+2       -589.53021              0.
+========================================================================
+Antisites 3(r) (pour r_1 < r <= r_1 + r_2)
+========================================================================
+5
+-2      -581.80962              0.
+-1      -584.16598              0.
+0       -586.56290              0.
+1       -588.12329              0.
+2       -589.25829              0.
+========================================================================
+Antisites 1(r) (pour r_1 < r <= r_1 + r_2 + r_3)
+========================================================================
+7
+-2      -576.64028              0.
+-1      -582.04270              0.
+0       -587.94712              0.
+1       -593.36673              0.
+2       -598.76949              0.
+3       -601.17003              0.
+4       -604.48901              0.
+========================================================================
+Antisites 2(r) (pour r_1 < r <= r_1 + r_2 + r_3)
+========================================================================
+5
+-2      -588.86936              0.
+-1      -592.70726              0.
+0       -595.83908              0.
+1       -597.36552              0.
+2       -598.50800              0.
+========================================================================
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+7
+-4      -575.52753              0.
+-3      -580.88886              0.
+-2      -586.31729              0.
+-1      -587.08753              0.
+0       -587.75732              0.
+1       -588.38166              0.
+2       -589.03722              0.
+9
+-6      -561.23184              0.
+-5      -566.19499              0.
+-4      -571.16620              0.
+-3      -573.81440              0.
+-2      -575.98963              0.
+-1      -577.84164              0.
+0       -579.74197              0.
+1       -581.84357              0.
+2       -583.44696              0.
+7
+-2      -579.03737              0.
+-1      -584.16522              0.
+0       -589.53374              0.
+1       -591.77589              0.
+2       -594.76647              0.
+3       -596.05414              0.
+4       -597.19799              0.
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)                           ###Zone présente seulement si au moins 4 types
+========================================================================&&&et / ou prise en compte d'interstitiels
+5
+-2      -588.10258              0.
+-1      -592.27052              0.
+0       -597.18223              0.
+1       -602.73789              0.
+2       -608.57933              0.
+========================================================================&&&                     |
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)                           &&&                     |
+========================================================================&&&                     |
+9
+-4      -586.33808              0.
+-3      -590.14318              0.
+-2      -594.40192              0.
+-1      -597.31476              0.
+0       -599.75030              0.
+1       -602.25719              0.
+2       -604.18053              0.
+3       -605.70558              0.
+4       -607.08111              0.
+========================================================================&&&                     |
+Interstitiels 3(r) (pour r > r_1 + r_2 + r_3)                           &&&                     |
+========================================================================&&&                     |
+7
+-4      -587.88333              0.
+-3      -592.33269              0.
+-2      -598.17682              0.
+-1      -599.40852              0.
+0       -602.48412              0.
+1       -603.61955              0.
+2       -604.70108              0.                                                              &&&                     |
+========================================================================&&&                     |
+
+######################################################
+#####PARAMETRES RELATIFS AUX DEFAUTS COMPLEXES CHARGES###Champs à inclure seulement si l'option "complexes" est activée
+#####(mode muVT seulement)
+######################################################
+
+---------------------------------------------
+Nombre maximum de sites des complexes chargés
+========================================================================
+4
+========================================================================
+
+--------------------------------------------
+Nombre de types de défauts complexes chargés
+========================================================================
+4
+========================================================================
+
+========================================================================
+################Caractéristiques des complexes chargés##################
+========================================================================
+
+------------------------------------------------------------------------
+Numéro          Multiplicité    Sous-réseau correspondant       Nombre
+du complexe     d'orientation   à cette multiplicité            de sites
+========================================================================
+1               3               2                               3       L(CO2) intra111intraCO3
+========================================================================
+Numéros de sous-réseaux des sites occupés par le complexe
+========================================================================
+2       3       3
+========================================================================
+Types chimiques du complexe sur ces sites, dans le même ordre (0 = lacune)
+========================================================================
+0       0       0
+========================================================================
+Paramètres de supercellule pour le complexe chargé
+--------------------------------------------------
+Charge          Energie (eV)                    Volume (A**3)
+========================================================================
+9
+-4              -552.853                        0.000
+-3              -556.218                        0.000
+-2              -561.711                        0.000
+-1              -566.718                        0.000
+0               -571.907                        0.000
+1               -573.438                        0.000
+2               -574.414                        0.000
+3               -575.358                        0.000
+4               -576.290                        0.000
+========================================================================
+
+------------------------------------------------------------------------
+Numéro          Multiplicité    Sous-réseau correspondant       Nombre
+du complexe     d'orientation   à cette multiplicité            de sites
+========================================================================
+2               2               3                               2       L(O2) intra111intraCO3
+========================================================================
+Numéros de sous-réseaux des sites occupés par le complexe
+========================================================================
+3       3
+========================================================================
+Types chimiques du complexe sur ces sites, dans le même ordre (0 = lacune)
+========================================================================
+0       0
+========================================================================
+Paramètres de supercellule pour le complexe chargé
+--------------------------------------------------
+Charge          Energie (eV)                    Volume (A**3)
+========================================================================
+9
+-4              -559.131                        0.000
+-3              -563.848                        0.000
+-2              -569.447                        0.000
+-1              -574.038                        0.000
+0               -578.636                        0.000
+1               -582.914                        0.000
+2               -586.447                        0.000
+3               -587.695                        0.000
+4               -588.824                        0.000
+========================================================================
+
+------------------------------------------------------------------------
+Numéro          Multiplicité    Sous-réseau correspondant       Nombre
+du complexe     d'orientation   à cette multiplicité            de sites
+========================================================================
+3               1               2                               4       L(CO3) intra111intraCO3
+========================================================================
+Numéros de sous-réseaux des sites occupés par le complexe
+========================================================================
+2       3       3       3
+========================================================================
+Types chimiques du complexe sur ces sites, dans le même ordre (0 = lacune)
+========================================================================²
+0       0       0       0
+========================================================================
+Paramètres de supercellule pour le complexe chargé
+--------------------------------------------------
+Charge          Energie (eV)                    Volume (A**3)
+========================================================================
+9
+-4              -540.953                        0.000
+-3              -546.050                        0.000
+-2              -551.406                        0.000
+-1              -556.892                        0.000
+0               -562.401                        0.000
+1               -566.769                        0.000
+2               -571.427                        0.000
+3               -572.529                        0.000
+4               -573.526                        0.000
+========================================================================
+
+------------------------------------------------------------------------
+Numéro          Multiplicité    Sous-réseau correspondant       Nombre
+du complexe     d'orientation   à cette multiplicité            de sites
+========================================================================
+4               3               2                               2       L(CO) intra111intraCO3
+========================================================================
+Numéros de sous-réseaux des sites occupés par le complexe
+========================================================================
+2       3
+========================================================================
+Types chimiques du complexe sur ces sites, dans le même ordre (0 = lacune)
+========================================================================
+0       0
+========================================================================
+Paramètres de supercellule pour le complexe chargé
+--------------------------------------------------
+Charge          Energie (eV)                    Volume (A**3)
+========================================================================
+9
+-4              -562.229                        0.000
+-3              -567.218                        0.000
+-2              -572.677                        0.000
+-1              -574.712                        0.000
+0               -577.919                        0.000
+1               -579.946                        0.000
+2               -581.166                        0.000
+3               -582.255                        0.000
+4               -583.329                        0.000
+========================================================================
+
+

@@ -1,0 +1,330 @@
+C     ==================================================================
+C     I                                                                I
+C     I Calcul des quantités de défauts ponctuels dans l'ADPI          I
+C     I dans un alliage unaire, binaire ou ternaire ordonné            I
+C     I à plusieurs sous-réseaux avec éléments d'addition              I
+C     I                                                                I
+C     I Les r1 premiers sous-réseaux contiennent l'espèce 1            I
+C     I les r2 suivants l'espèce 2                                     I
+C     I les r3 suivants l'espèce 3                                     I
+C     I dans l'état fondamental sans défaut                            I
+C     I                                                                I
+C     I Aucun sous-réseau ne contient les éléments d'addition          I
+C     I (i>3) à l'état fondamental                                     I
+C     I                                                                I
+C     I Les sous-réseaux d'indices > r1 + r2 + r3 sont interstitiels   I
+C     I                                                                I
+C     I On note p(r) le nombre de sites du sous-réseau r par maille    I
+C     I                                                                I
+C     I----------------------------------------------------------------I
+C     I Remarque :                                                     I
+C     I les volumes des défauts ponctuels ne sont pas utilisés         I
+C     I dans le calcul des quantités de défauts et ne servent          I
+C     I que pour le calcul du volume par maille                        I
+C     I----------------------------------------------------------------I
+C     I                                                                I
+C     I Trois types de calculs :                                       I
+C     I                                                                I
+C     I ------------------------------------------		       I
+C     I Ensemble grand canonique ( mu(i) , V , T )                     I
+C     I ------------------------------------------		       I
+C     I                                                                I
+C     I Relation de Gibbs-Duhem approchée pour la pression             I
+C     I                                                                I
+C     I Ce programme effectue :                                        I
+C     I A) à partir de la relation de Gibbs-Duhem, le calcul approché  I
+C     I    de la valeur de N(1)*mu(1) + N(2)*mu(2) + N(3)*mu(3)        I
+C     I    correspondant à la pression prescrite                       I
+C     I                                                                I
+C     I    Attention : il s'agit de la pression externe                I
+C     I                exercée sur le système par l'extérieur          I
+C     I                                                                I
+C     I B) un balayage en écarts de potentiels chimiques	       I
+C     I            mu(1) - mu(2) et mu(1) - mu(3)    		       I
+C     I             et en mu(i>3)                                      I
+C     I                                                                I
+C     I C) pour chaque valeur de mu(1) - mu(2), mu(1) - mu(3), mu(i>3) I
+C     I       l'écriture dans les fichiers ".adpi" des grandeurs :     I
+C     I     (i) composition                                            I
+C     I    (ii) quantités de défauts ponctuels x_déf, avec déf =       I
+C     I  1(r) pour r1 < r <= r1 + r2 + r3			       I
+C     I         ou r > r1 + r2 + r3 (1 interstitiel),   	       I
+C     I  2(r) pour r <= r1 ou r1 + r2 < r <= r1 + r2 + r3	       I	
+C     I         ou r > r1 + r2 + r3 (2 interstitiel),   	       I	
+C     I  3(r) pour r <= r1 + r2 				       I
+C     I         ou r > r1 + r2 + r3 (3 interstitiel),                  I
+C     I  L(r) pour r <= r1 + r2 + r3                                   I
+C     I  i(r) pour tout r                                              I
+C     I   (iii) énergie, volume, entropie de configuration             I
+C     I         et enthalpie libre par atome ou par maille             I
+C     I                                                                I
+C     I -------------------------------                                I
+C     I Ensemble ( N(i) , P , T = 0 K )                		       I
+C     I -------------------------------                                I
+C     I                                                                I
+C     I Minimisation de H (méthode du simplexe)			       I
+C     I par rapport aux quantités de DP                                I
+C     I sous les contraintes de quantités de matière constantes        I
+C     I                                                                I
+C     I -----------------------------                                  I
+C     I Ensemble (N(i) , P , T ) 	                               I
+C     I -----------------------------                                  I
+C     I                                                                I
+C     I Résolution par la méthode de Newton-Raphson (NR)               I
+C     I du système non linéaire d'inconnues ( M , x_d )                I
+C     I correspondant à la minimisation de l'enthalpie libre           I
+C     I                                                                I
+C     I Attention :						       I
+C     I un calcul NPT peut diverger si les paramètres sont mal choisis I
+C     I => penser à jouer sur les paramètres suivants :		       I	
+C     I * ordre (croissant / décroissant) du balayage en T ou x        I 
+C     I * finesse du balayage (nombre de points)		       I
+C     I * valeurs initiales des inconnues			       I
+C     I * fréquence de calcul de la matrice jacobienne                 I
+C     I et également (plus rare)				       I
+C     I * nombre maximal d'itérations de NR			       I
+C     I * précision pour l'arrêt de l'algorithme de NR		       I	
+C     I * incrément pour le calcul de la matrice jacobienne            I
+C     I                                                                I
+C     ==================================================================
+
+########################
+#####PARAMETRES GENERAUX
+########################
+
+-----------
+Commentaire
+========================================================================
+Ti hcp avec O en  substitution et  en insertion
+(sites inter. = octa + tétra spécifiés dans cet ordre)
+Ti = 1 - O = 2 
+========================================================================
+
+----------------------------------
+Base du nom des fichiers de sortie
+========================================================================
+Ti_O_1000K
+========================================================================
+
+------------------------------------------------------
+Nombres de types chimiques
+------------------------------------------------------
+total		intrinsèque (hors éléments d'addition)
+========================================================================
+2		1
+========================================================================
+
+-----------------------------------------------------------
+Nombre de sous-réseaux
+(entendu au sens d'ensemble d'atomes de même environnement)
+========================================================================
+3
+========================================================================
+
+---------------------------------------------------
+Présence de sous-réseaux interstitiels (O/o ou N/n)
+========================================================================
+o
+========================================================================
+
+-----------------------------------------------------------
+Prise en compte des interstitiels intrinsèques (O/o ou N/n)
+========================================================================
+o
+========================================================================
+
+----------------------------------------------------------------------
+Nombres de sous-réaux occupépar les espès intrinsèes à'ét fondamental
+========================================================================
+1      
+========================================================================
+
+--------------------------------------------------
+Nombre de sites par maille pour chaque sous-réseau
+========================================================================
+2      2	4 
+========================================================================
+
+------------------------------------------
+Présence de défauts complexes (O/o ou N/n)
+========================================================================
+n
+========================================================================
+
+----------------------------------------------------------------------
+Température (K) (présente mais inutile en modes NPT=0 et NPT(T/xT/Tx))
+========================================================================
+1000.
+========================================================================
+
+-----------------------
+Pression externe (kbar)
+========================================================================
+0.
+========================================================================
+
+------------------------------------------------------------------------
+Energies (libres) de référence des diverses espèces chimiques (eV/atome)
+========================================================================
+0.0     0.0     0.0     0.0     0.0
+========================================================================
+
+-----------------------------------------------
+Choix d'écriture des grandeurs thermodynamiques 
+par atome (A/a) ou par maille (M/m)
+========================================================================
+a
+========================================================================
+
+----------------------------------------------------
+Indicateur d'écriture de l'énergie libre par atome :
+énergie libre totale (T/t) ou de formation (F/f)
+========================================================================
+t
+========================================================================
+
+-----------------------------------
+Type de calcul (muVT, NPT ou NPT=0)
+========================================================================
+muVT
+========================================================================
+
+-----------------------------------------------
+Indicateur (0/1) de DP chargés (mode muVT seul)
+========================================================================
+0
+========================================================================
+
+##################################################
+#####PARAMETRES RELATIFS A UN CALCUL muVT ou NPT#0                      ###Champs présents seulement si calcul muVT/NPT#0
+##################################################			###                     |
+                                                                        ###Fin de zone présente seulement si au moins 3 types
+------------------------------------------------------------------------###                     |
+Elément dont on étudie l'effet de l'enrichissement
+(toutes les autres fractions atomiques étant fixées par les contraintes)
+ --> champ à inclure (i) en NPT(x), (ii) en muVT si N_TYP > 2
+   y compris en muVT lorsque le filtre "fenêtres" n'est pas sélectionné
+   (cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+   bien que ce champ soit alors inutilisé dans ce cas.
+========================================================================###                     |
+2                                                                       ###                     |
+========================================================================###                     |
+                                                                        ###                     |
+------------------------------------------------------------------------
+Valeurs extrémales du domaine de fraction atomique
+pour l'élément spécifié (dont on étudie l'enrichissement)
+ --> champs à inclure (i) en NPT(x), (ii) en muVT si N_TYP > 2
+   y compris en muVT lorsque le filtre "fenêtres" n'est pas sélectionné
+   (cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+   bien que ces champs soient alors inutilisés dans ce cas.
+========================================================================###                     |
+0.0     0.05                                                            ###                     |
+========================================================================###			V
+                                                                       
+############################################
+#####PARAMETRES SPECIFIQUES A UN CALCUL muVT				###Champs utilisés seulement si calcul muVT
+############################################
+
+--------------------------------------------------------------------
+(i) Type chimique intrinsèque de référence pour les potentiels chimiques
+(ii) Précision pour l'arrêt de la boucle d'autocohérence sur POT_1
+(iii) Nombre maximum d'itérations pour l'arrêt de cette boucle
+(choisir N_ITER_MAX_MU_1 = 1 pour ne pas faire d'autocohérence)
+========================================================================
+1               1.D-8           1
+========================================================================
+									###			|
+-----------------------------------------------------			###			|
+Demi-largeurs des fenêtres en composition
+pour les éléments autres que celui spécifié
+ --> champs à inclure ssi N_TYP > 2, y compris lorsque INDIC_FENETRE = n
+ (bien que ces champs soient inutilisés dans ce cas).
+========================================================================###			| 
+0.00005		0.00005		         	       			###			V
+========================================================================###Fin de zone présente seulement si au moins 3 types
+
+========================================================================
+========================Cas des DP NON CHARGES==========================
+==============Sous-section muVT relative aux balayages==================
+============en "delta_mu(intrinsèques)" et "mu(additions)"==============
+========================================================================
+
+------------------------------------------------------------		### 		        |
+Propriétés de la série mu(addition 2)					###			|
+------------------------------------------------------------		###			|
+Valeur initiale         Nombre                  Pas			###			|
+de mu(2) (eV)           de valeurs              (eV)			###			|
+========================================================================###			|
+-12.000                   300                 0.010
+========================================================================###                     |
+
+###############################################
+#####PARAMETRES DE LA SUPERCELLULE DE REFERENCE
+###############################################
+
+------------------------------------------------------------
+Energie de référence de la cellule sans défaut ponctuel (eV)
+========================================================================
+-749.07575481
+========================================================================
+
+-------------------------------------------------------
+Volume de référence de la cellule sans défaut (A * * 3)
+========================================================================
+0.
+========================================================================
+
+----------------------------------------------
+Nombre de mailles contenues dans cette cellule
+========================================================================
+48
+========================================================================
+
+###########################################################
+#####PARAMETRES DES SUPERCELLULES DE DP SIMPLES NON CHARGES
+###########################################################
+
+-------------------------------------------------
+Energies "brutes" des défauts ponctuels (eV)
+(= énergie de la cellule de même nombre de sites
+que la cellule de référence sans défaut ponctuel)
+-------------------------------------------------
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+-739.2145188
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+-700.236   -700.236 
+========================================================================
+Substitutionnels 2(r) (pour r <= r_1 + r_2 + r_3)			###			|
+========================================================================###                     |
+-749.6382079   
+========================================================================###                     |
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)			###			|
+========================================================================###                     |
+-759.5010916  -758.2618091
+========================================================================###			|
+
+-------------------------------------------------
+Volumes "bruts" des défauts ponctuels (A * * 3 )
+(= volume de la cellule de même nombre de sites
+que la cellule de référence sans défaut ponctuel)
+-------------------------------------------------
+Lacunes L(r) (pour r <= r_1 + r_2 + r_3)
+========================================================================
+0.0  
+========================================================================
+Interstitiels 1(r) (pour r > r_1 + r_2 + r_3)
+========================================================================
+0.0        0.0
+========================================================================
+Substitutionnels 2(r) (pour r <= r_1 + r_2 + r_3)			###			|
+========================================================================###                     |
+0.0       
+========================================================================###                     |
+Interstitiels 2(r) (pour r > r_1 + r_2 + r_3)			###			|
+========================================================================###                     |
+0.0			0.0       
+========================================================================###			|
+

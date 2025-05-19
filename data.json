@@ -1,0 +1,67 @@
+{
+  "tab1": {
+    "comment": "Ti hcp avec O en  substitution et  en insertion\n(sites inter. = octa + tetra specifies dans cet ordre)\nTi = 1 - O = 2",
+    "basename": "Ti_2000K",
+    "chem_types_total": 2,
+    "chem_types_intrinsic": 1,
+    "n_sublattices": 3,
+    "interstitial": false,
+    "intrinsic_interstitial": false,
+    "n_sublattices_intrinsic": 0,
+    "sites_per_cell": [
+      "2",
+      "2",
+      "4"
+    ],
+    "complex_defects": false,
+    "temperature": 2000.0,
+    "pressure": 0.0,
+    "ref_energies": [
+      "0.00",
+      "0.00"
+    ],
+    "thermo_mode": "a",
+    "free_energy_type": "t",
+    "calc_type": "muVT",
+    "dp_charges": 0
+  },
+  "tab2": {
+    "elem_enrichi": 2,
+    "frac_min": 0.0,
+    "frac_max": 0.05,
+    "type_ref": 1,
+    "precision": 1e-08,
+    "niter": 1,
+    "demi_largeurs": [
+      "0.00005"
+    ],
+    "mu2_init": -12.0,
+    "mu2_nb": 300,
+    "mu2_step": 0.01
+  },
+  "tab3": {
+    "energy_ref": -749.07575481,
+    "vol_ref": 0.0,
+    "nb_cells": 48,
+    "energy_lacune": -739.2145188,
+    "energy_inter1": [
+      -700.236,
+      -700.236
+    ],
+    "energy_subst2": -749.6382079,
+    "energy_inter2": [
+      -759.5010916,
+      -758.2618091
+    ],
+    "vol_lacune": 0.0,
+    "vol_inter1": [
+      0.0,
+      0.0
+    ],
+    "vol_subst2": 0.0,
+    "vol_inter2": [
+      0.0,
+      0.0
+    ]
+  }
+}
