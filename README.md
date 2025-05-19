@@ -106,7 +106,7 @@ L’objectif est de faciliter la saisie, la modification et la validation de ces
 ## Lancement
 
 ```bash
-python fortran_input_editor.py
+python main_v2.py
 ```
 
 ---

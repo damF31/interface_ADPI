@@ -23,6 +23,8 @@
 3. Lien avec GitHub :
     ```bash
     git remote add origin https://github.com/ton_login/nom_du_repo.git
+OU
+    git remote set-url origin git@github.com:damF31/interface_ADPI.git
     ```
 
 ## 2. Ajouter et pousser tes fichiers
