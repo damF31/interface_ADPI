@@ -1,0 +1,3225 @@
+C     ==================================================================
+C     I     Approximation des Défauts Ponctuels Indépendants (ADPI)    I
+C     I             pour la description thermodynamique                I
+C     I                 d'un alliage/composé ordonné                   I
+C     I             (composé intermétallique, minéral,...)             I
+C     I        avec un, deux ou trois éléments intrinsèques            I
+C     I                  et des nombres quelconques                    I
+C     I          de sous-réseaux et d'éléments d'addition              I
+C     ==================================================================
+C     I                                                                I
+C     I Grandeurs physiques calculées :                                I
+C     I -----------------------------                                  I
+C     I * quantités de défauts ponctuels                               I
+C     I * quantités thermodynamiques                                   I
+C     I (énergie libre, entropie, potentiels chimiques)                I
+C     I en fonction des variables thermodynamiques intensives :        I
+C     I composition = écart à la stoechiométrie, température           I
+C     I (et éventuellement pression)                                   I
+C     I                                                                I
+C     I Les r1 premiers sous-réseaux contiennent l'espèce 1            I
+C     I les r2 suivants l'espèce 2                                     I
+C     I les r3 suivants l'espèce 3                                     I
+C     I dans l'état fondamental sans défaut                            I
+C     I                                                                I
+C     I Aucun sous-réseau ne contient les éléments d'addition          I
+C     I (i>3) à l'état fondamental                                     I
+C     I                                                                I
+C     I Les sous-réseaux d'indices > r1 + r2 + r3 sont interstitiels   I
+C     I                                                                I
+C     I On note p(r) le nombre de sites du sous-réseau r par maille    I
+C     I                                                                I
+C     I                 ============================                   I
+C     I                 Trois modes de calcul ADPI :                   I
+C     I                 ============================                   I
+C     I                                                                I
+C     I --------------------------------------------------             I
+C     I Mode muVT --> ensemble grand canonique (mu(i),V,T)             I
+C     I --------------------------------------------------             I
+C     I                                                                I
+C     I Relation de Gibbs-Duhem approchée pour la pression :           I
+C     I à cause de cette relation P(mu(i),T) approchée,                I
+C     I le balayage en potentiels chimiques résultant induit           I
+C     I  une (légère) dérive en pression par rapport à la consigne.    I
+C     I -> ajout d'une possibilité de boucle d'autocohérence sur mu(1) I
+C     I pour éviter cette dérive en P.                                 I
+C     I                                                                I
+C     I En mode muVT, le programme ADPI effectue :                     I
+C     I A) à partir de la relation de Gibbs-Duhem, le calcul approché  I
+C     I    de la valeur de N(1)*mu(1) + N(2)*mu(2) + N(3)*mu(3)        I
+C     I    correspondant à la pression prescrite                       I
+C     I                                                                I
+C     I    Attention : il s'agit de la pression externe                I
+C     I                exercée sur le système par l'extérieur          I
+C     I                                                                I
+C     I B) un balayage en écarts de potentiels chimiques               I
+C     I d_mu_i = mu(i_réf) - mu(i) (i = 1, 2 ou 3 <> i_réf)	       I
+C     I             et en mu(i>3)                                      I
+C     I								       I
+C     I C) pour chaque valeur de d_mu_i et mu(i>3)                     I
+C     I       l'écriture dans les fichiers ".adpi" des grandeurs :     I
+C     I     (i) composition                                            I
+C     I    (ii) quantités de défauts ponctuels x_déf, avec déf =       I
+C     I  1(r) pour r1 < r <= r1 + r2 + r3                              I
+C     I         ou r > r1 + r2 + r3 (1 interstitiel),                  I
+C     I  2(r) pour r <= r1 ou r1 + r2 < r <= r1 + r2 + r3              I
+C     I         ou r > r1 + r2 + r3 (2 interstitiel),                  I
+C     I  3(r) pour r <= r1 + r2                                        I
+C     I         ou r > r1 + r2 + r3 (3 interstitiel),                  I
+C     I  L(r) pour r <= r1 + r2 + r3                                   I
+C     I  i(r) pour tout r                                              I
+C     I   (iii) énergie, volume, entropie de configuration             I
+C     I         et enthalpie libre par atome ou par maille             I
+C     I                                                                I
+C     I Possibilité de fenêtres en composition pour l'écriture         I
+C     I                                                                I
+C     I Il a été ajouté ultérieurement                                 I
+C     I la possibilité d'une boucle d'autocohérence sur mu(1)          I
+C     I pour compenser la dérive en P                                  I
+C     I induite par la relation approchée P(mu(i),T).                  I
+C     I                                                                I
+C     I -------------------------------------                          I
+C     I Mode NPT=0 --> ensemble (N(i),P,T=0K)                          I
+C     I -------------------------------------                          I
+C     I                                                                I
+C     I Minimisation de H (méthode du simplexe)                        I
+C     I par rapport aux quantités de DP                                I
+C     I sous les contraintes de quantités de matière constantes        I
+C     I                                                                I
+C     I Variantes disponibles pour le mode NPT=0 : P/p, x              I
+C     I                                                                I
+C     I --------------------------------                               I
+C     I Mode NPT --> ensemble (N(i),P,T)                               I
+C     I --------------------------------                               I
+C     I                                                                I
+C     I Résolution par la méthode de Newton-Raphson (NR)               I
+C     I du système non linéaire d'inconnues ( M , x_d )                I
+C     I correspondant à la minimisation de l'enthalpie libre           I
+C     I                                                                I
+C     I Variantes disponibles pour le mode NPT : P/p, T, x             I
+C     I                                                                I
+C     I Remarques :                                                    I
+C     I un calcul NPT peut diverger si les paramètres sont mal choisis I
+C     I => penser à jouer sur les paramètres suivants :                I
+C     I * ordre (croissant / décroissant) du balayage en T ou x        I
+C     I * finesse du balayage (nombre de points)                       I
+C     I * valeurs initiales des inconnues                              I
+C     I * fréquence de calcul de la matrice jacobienne                 I
+C     I et également (plus rare)                                       I
+C     I * nombre maximal d'itérations de NR                            I
+C     I * précision pour l'arrêt de l'algorithme de NR                 I
+C     I                                                                I
+C     I ====================================================	       I
+C     I          Possibilités de prise en compte :                     I
+C     I * de DP complexes (approximative, en muVT seulement)           I
+C     I * de DP chargés (en muVT"point" seulement)                     I
+C     I ====================================================	       I
+C     I                                                                I
+C     ==================================================================
+C     ==================================================================
+C     I Dernière mise à jour : 24/05/2022                              I
+C     I Mardi des Rogations                                            I
+C     ==================================================================
+      PROGRAM ADPI
+      USE CONSTANTES
+      IMPLICIT REAL * 8 ( A - H , O - Z )
+      IMPLICIT INTEGER * 4 ( I - N )
+C############################
+C############################
+C#####Déclarations et formats
+C############################
+C############################
+C###################################
+C#####Tableaux de dimension variable
+C###################################
+C--------------------------------------------------------
+C-----Commentaires écrits dans le fichier de compte-rendu
+C--------------------------------------------------------
+      CHARACTER * 100 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          COMMENTAIRE
+C------------------------
+C-----Fractions atomiques
+C------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          X_AT
+C-------------------------------------------------------------
+C-----Coefficients des contraintes relatives
+C-----aux compositions à écrire dans les fichiers de résultats
+C-----et demi-largeurs de fenêtres correspondantes
+C-----(ainsi qu'un tableau de valeurs initiales
+C-----pour la commodité de lecture en raison des indices
+C----- - absence de I_TYP_0)
+C-------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          COEF_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          D_X_AT_INIT
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          D_X_AT
+C---------------------------------------------------
+C-----Matrices de décomposition LU pour le calcul
+C-----des fractions atomiques issues des contraintes
+C---------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          MAT_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          L_MAT_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          U_MAT_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          P_MAT_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          Q_MAT_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          MAT_INV_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          VECT_CTR
+C-----------------------------------------------
+C-----Fractions atomiques "centrales" et limites
+C-----à écrire dans les fichiers de résultats
+C-----------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          X_AT_0_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          X_AT_INF_CTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          X_AT_SUP_CTR
+C---------------------------------------------------
+C-----Potentiels chimiques des éléments intrinsèques
+C---------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          POT_INTR
+C-------------------------------------------------
+C-----Potentiels chimiques des éléments d'addition
+C-------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          POT_I
+C--------------------------------------------
+C-----Termes relatifs aux éléments d'addition
+C--------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          ALPHA_I_R
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          SOMME_I
+C------------------------------------------------------------------
+C-----Valeurs initiales, nombres de pas et incréments
+C-----des écarts de potentiels chimiques
+C-----pour les éléments intrinsèques autres que celui de référence
+C-----------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          D_POT_REF_INTR_INIT
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          N_D_POT_REF_INTR
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          PAS_D_POT_REF_INTR
+C----------------------------------------------------
+C-----Valeurs initiales, nombres de pas et incréments
+C-----de potentiels chimiques des éléments d'addition
+C----------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          POT_I_INIT
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          N_POT_I
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          PAS_POT_I
+C---------------------------------------------------------
+C-----Potentiels chimiques moyens des éléments d'addition,
+C-----leurs carrés et les variances correspondantes
+C-----pour les valeurs écrites
+C---------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          POT_I_MOY
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          POT_I_2_MOY
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          VAR_POT_I
+C--------------------------------------------------------------
+C-----Produits partiels des nombres de pas
+C-----pour les potentiels chimiques d'addition
+C-----(utile pour la simulation de plusieurs boucles imbriquées
+C-----en potentiels chimiques avec un seul indice)
+C--------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) :: 
+     $                                          PROD_PART_N_POT_I
+C------------------------------------------------
+C-----Fractions d'antisites et lacunes (indice 0)
+C-----dans les divers sous-réseaux
+C------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          X_D_R
+C-------------------------------------------------------
+C-----Nombre de sites par maille pour chaque sous-réseau
+C-------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          P_R
+C-----------------------------------------------------------------
+C-----Nombre de sous-réseaux pour chaque espèce intrinsèque
+C-----(utile pour le cas d'une extension à N espèces intrinsèques)
+C-----------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          N_R_N
+C-----------------------------------
+C-----Nombres cumulés correspondants
+C-----------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          RHO_N
+C====================================================================
+C====================================================================
+C=====Paramètres GC pour des défauts simples neutres (INDIC_CHARGE=0)
+C====================================================================
+C====================================================================
+C--------------------------------------------------------------
+C-----Energies "brutes" des défauts sur les divers sous-réseaux
+C--------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          E_B_D_R
+C--------------------------------------------------------
+C-----Energies GC des défauts sur les divers sous-réseaux
+C--------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          E_GC_D_R
+C----------------------------------
+C-----Enthalpies GC correspondantes
+C----------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          H_GC_D_R
+C-------------------------------------
+C-----Mêmes quantités pour les volumes
+C-------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          V_B_D_R
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          V_GC_D_R
+C--------------------------------------------------------------------
+C-----Enthalpies de formation des défauts sur les divers sous-réseaux
+C--------------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          H_FORM_D_R
+C--------------------------------------
+C-----Termes complémentaires d'entropie
+C--------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          Z_TYP_R
+C================================================
+C================================================
+C=====Paramètres pour des défauts simples chargés
+C================================================
+C================================================
+C--------------------------------------------------
+C-----Densité d'états électroniques :
+C-----pour chaque point, valeur de l'énergie et DdE
+C--------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          TAB_DDE
+C-------------------------------------------------------
+C-----Tableau des nombres d'états de charges pour les DP
+C-------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          NQ_D_R_Q
+C---------------------------------------------------------------
+C-----Charges (entières) des défauts sur les divers sous-réseaux
+C---------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          Q_D_R_Q
+C--------------------------------------------------------------
+C-----Energies "brutes" des défauts sur les divers sous-réseaux
+C--------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          E_B_D_R_Q
+C--------------------------------------------------------
+C-----Energies GC des défauts sur les divers sous-réseaux
+C--------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          E_GC_D_R_Q
+C----------------------------------
+C-----Enthalpies GC correspondantes
+C----------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          H_GC_D_R_Q
+C-------------------------------------
+C-----Mêmes quantités pour les volumes
+C-------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          V_B_D_R_Q
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          V_GC_D_R_Q
+C--------------------------------------------------------------------
+C-----Enthalpies de formation des défauts sur les divers sous-réseaux
+C--------------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : , : ) ::
+     $                                          H_FORM_D_R_Q
+C===================================================================
+C===================================================================
+C=====Paramètres relatifs aux défauts complexes (pour ADPI sans chg)
+C===================================================================
+C===================================================================
+C-----------------
+C-----Multiplicité
+C-----------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                MULTIPLICITE_COMPLEXE
+C-----------------------------------------------------------
+C-----Sous-réseau sur lequel est calculée cette multiplicité
+C-----------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                I_S_R_MULTIPLICITE_COMPLEXE
+C--------------------------------
+C-----Nombre de sites du complexe
+C--------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                NOMBRE_SITES_COMPLEXE
+C--------------------------------------------------------------
+C-----Numéros de sous-réseaux des sites occupés par le complexe
+C--------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                I_S_R_COMPLEXE
+C-----------------------------------------------
+C-----Types chimiques du complexe sur ces sites,
+C-----dans le même ordre (0 = lacune)
+C-----------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                I_TYPE_COMPLEXE
+C-------------------------------------------------
+C-----Energie et volume "bruts" de chaque complexe
+C-------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  E_B_D_COMPLEXE 
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  V_B_D_COMPLEXE
+C-------------------------------------------------------
+C-----Energie, volume et enthalpie GC de chaque complexe
+C-------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  E_GC_D_COMPLEXE                 
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  V_GC_D_COMPLEXE
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  H_GC_D_COMPLEXE
+C--------------------------------------------------------
+C-----Paramètres indicateurs de types et de sous-réseaux
+C-----utiles au calcul des termes de potentiels chimiques  
+C-----associés aux complexes
+C--------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  ALPHA_TYPE_COMPLEXE
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  BETA_S_R_COMPLEXE
+C--------------------------------------------------------------------
+C-----Type chimique normal de chaque sous-réseau
+C-----(0 pour sous-réseaux interstitiels)
+C-----utile au calcul des termes de potentiels chimiques de complexes
+C--------------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  I_TYPE_NORMAL_S_R
+C----------------------------------------------------------
+C-----Nombre de sites du sous-réseau r dans chaque complexe
+C-----et nombre d'atomes de type i dans ce complexe
+C----------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  U_COMPLEXE_S_R
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  V_COMPLEXE_TYPE
+C---------------------------
+C-----Fractions de complexes
+C---------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                  X_D_COMPLEXE
+C--------------------------------------------------
+C-----Enthalpies de formation des défauts complexes
+C--------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          H_FORM_D_COMPLEXE
+C-------------------------------------------
+C-----Termes de somme sur les complexes
+C-----relatifs aux éléments d'addition
+C-----dans le calcul des fractions atomiques
+C-------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          SOMME_COMPLEXE_V_TYPE_I
+C===================================================================
+C===================================================================
+C=====Paramètres relatifs aux défauts complexes chargés (suffixe _Q)
+C===================================================================
+C===================================================================
+C---------------------------------------
+C-----Indicateur de DP complexes chargés
+C---------------------------------------
+       CHARACTER INDIC_COMPLEXES_Q
+C--------------------------------------------------
+C-----Nombre d'états de charge pour chaque complexe
+C--------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                NQ_COMPLEXE_Q
+C--------------------------------------------------
+C-----Nombre d'états de charge pour chaque complexe
+C--------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                Q_COMPLEXE_Q
+C-----------------
+C-----Multiplicité
+C-----------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                MULTIPLICITE_COMPLEXE_Q
+C-----------------------------------------------------------
+C-----Sous-réseau sur lequel est calculée cette multiplicité
+C-----------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                           I_S_R_MULTIPLICITE_COMPLEXE_Q
+C--------------------------------
+C-----Nombre de sites du complexe
+C--------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                NOMBRE_SITES_COMPLEXE_Q
+C--------------------------------------------------------------
+C-----Numéros de sous-réseaux des sites occupés par le complexe
+C--------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                I_S_R_COMPLEXE_Q
+C------------------------------------------------------
+C-----Types chimiques sur chacun des sites du complexe,
+C-----dans le même ordre que les s-r (0 = lacune)
+C------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                I_TYPE_COMPLEXE_Q
+C-------------------------------------------------
+C-----Energie et volume "bruts" de chaque complexe
+C-----pour chaque état de charge
+C-------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  E_B_COMPLEXE_Q
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                              V_B_COMPLEXE_Q
+C-------------------------------------------------------
+C-----Energie, volume et enthalpie GC de chaque complexe
+C-----pour chaque état de charge
+C-------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  E_GC_COMPLEXE_Q
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  V_GC_COMPLEXE_Q
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  H_GC_COMPLEXE_Q
+C----------------------------------------------------------
+C-----Nombre de sites du sous-réseau r dans chaque complexe
+C-----et nombre d'atomes de type i dans ce complexe
+C----------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  U_COMPLEXE_S_R_Q
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  V_COMPLEXE_TYPE_Q
+C-------------------------------
+C-----Fractions de complexes
+C-----pour chaque état de charge
+C-------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                  X_COMPLEXE_Q
+C--------------------------------------------------
+C-----Enthalpies de formation des défauts complexes
+C-----pour chaque état de charge
+C--------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                             H_FORM_COMPLEXE_Q
+C============================================================
+C============================================================
+C=====Chaînes de caractères pour suffixes de noms de fichiers
+C============================================================
+C============================================================
+C--------------------------------------------------------
+C-----Chaîne de caractères pour les suffixes de DP
+C-----(défaut ponctuel et sous-réseau) et leurs longueurs
+C--------------------------------------------------------
+      CHARACTER * 4 , ALLOCATABLE , DIMENSION ( : ) :: W_R
+      CHARACTER * 4 , ALLOCATABLE , DIMENSION ( : ) :: W_TYP
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) :: L_W_R
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) :: L_W_TYP
+C--------------------------------------------------------
+C-----Chaîne de caractères pour les suffixes de complexes
+C-----et leurs longueurs
+C--------------------------------------------------------
+      CHARACTER * 4 , ALLOCATABLE , DIMENSION ( : ) :: W_COMPLEXE
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) :: L_W_COMPLEXE
+C-----------------------------------------------------------------
+C-----Tableau des noms de DP en fonction des types et sous-réseaux
+C-----et longueurs correspondantes
+C-----------------------------------------------------------------
+      CHARACTER * 10 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          NOM_D_R_TYP
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          LONG_NOM_D_R_TYP
+C---------------------------------------------------
+C-----Noms des DP en fonction de leur indice unique,
+C-----longueurs des noms correspondantes,
+C-----sous-réseaux et types,
+C-----énergies, volumes et enthalpies GC
+C---------------------------------------------------
+      CHARACTER * 10 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                          NOM_D_IND
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                        LONG_NOM_D_IND
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                        I_TYP_R_D_IND
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                        E_GC_D_IND
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                        V_GC_D_IND
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : ) ::
+     $                                        H_GC_D_IND
+C=============================================
+C=============================================
+C=====Tableaux relatifs à l'ADPI NPT à T = 0 K
+C=============================================
+C=============================================
+C---------------------------------------------------------------
+C-----Indice du DP en fonction de son sous-réseau et de son type
+C---------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          IND_D_R_TYP 
+C---------------------------------------------------------------------
+C-----Tableau du simplexe contenant :
+C-----(i) la fonction H à minimiser en première ligne
+C-----(i) les contraintes dans les lignes 2 à N_TYP + 1
+C-----(i) la fonction auxiliaire dans la ligne N_TYP + 2
+C-----Ce tableau contient N_TYP_D_R + 2 colonnes :
+C-----la première colonne contient les valeurs des contraintes,
+C-----les autres colonnes contiennent les coefficients des contraintes
+C---------------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : , : ) :: TAB_SMPLX_D_R
+C--------------------------------------
+C-----Tableaux de résultats du simplexe
+C--------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION  ( : ) :: I_1_SMPLX
+      INTEGER * 4 , ALLOCATABLE , DIMENSION  ( : ) :: I_2_SMPLX
+C-----------------------------------------------
+C-----En mode NPT=0 "balayage",
+C-----tableau de résultats du simplexe précédent
+C-----pour détection de limite de zone
+C-----------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION  ( : ) :: I_2_SMPLX_PREC
+C-------------------------------------------------------------
+C-----Tableau des indices de la liste initiale I_2_SMPLX de DP
+C-----classés par ordre croissant
+C-------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION  ( : ) :: IND_INIT
+C--------------------------------------------------------------
+C-----Tableau des sous-réseaux et types des DP constitutionnels
+C--------------------------------------------------------------
+      INTEGER * 4 , ALLOCATABLE , DIMENSION  ( : , : ) ::
+     $                                           I_TYP_R_DP_CONST
+C------------------------------------------------------
+C-----Matrice N_TYP x N_TYP entre les variables
+C-----(N_maille, n_d_const) et ( N_I )
+C-----utile au calcul des potentiels chimiques en NPT=0
+C-----et inverse de cette matrice
+C------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : , : ) ::
+     $                                           MAT_CALC_POT
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : , : ) ::
+     $                                           MAT_CALC_POT_INV
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : ) ::
+     $                                           POT_CHIM_0K
+C------------------------------------------------------------------
+C-----Energies de référence des diverses espèces chimiques (eV/at.)
+C------------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : ) ::
+     $                                           E_REF_TYP
+C=====================================
+C=====================================
+C=====Tableaux relatifs à l'ADPI - NPT
+C=====================================
+C=====================================
+C-----------------------------------------
+C-----log_10 des fractions initiales de DP
+C-----------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : , : ) ::
+     $                                           LOG_X_D_R_INIT
+C--------------------------------------------------------
+C-----Vecteur, fonction vectorielle et matrice jacobienne
+C-----du système non linéaire à résoudre en NPT
+C--------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : ) ::
+     $                                           X_NPT
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : ) ::
+     $                                           F_NPT
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : , : ) ::
+     $                                           J_NPT
+C----------------------------------------
+C-----En NPT, vecteur initial à un indice
+C----------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION  ( : ) ::
+     $                                           X_NPT_INIT
+C------------------------------------------------
+C-----En NPT, ce même vecteur lu dans un fichier,
+C-----pour chaque composition / température
+C------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          X_NPT_INIT_FICH
+C------------------------------------------------------------
+C-----En NPT(Tx) : tableau pour la conservation des résultats 
+C-----(aux diverses compo. = boucle interne)
+C-----à la température courante en vue de l'initialisation
+C-----à chaque compo. à la température suivante
+C------------------------------------------------------------
+      REAL * 8 , ALLOCATABLE , DIMENSION ( : , : ) ::
+     $                                          X_NPT_COMPO_SVG
+C###############################
+C#####Tableaux de dimension fixe
+C###############################
+C-------------------------------------------------
+C-----Chaîne de lecture dans le fichier de données
+C-------------------------------------------------
+      CHARACTER * 100 CHAINE_LECT
+C---------------------------------------
+C-----Base du nom des fichiers de sortie
+C---------------------------------------
+      CHARACTER * 150 FICH_FIN
+C---------------------------------------------------------
+C-----Indicateur de présence de sous-réseaux interstitiels
+C---------------------------------------------------------
+      CHARACTER * 1 INDIC_R_INTER
+C-----------------------------------------------------------------
+C-----Indicateur de prise en compte des interstitiels intrinsèques
+C-----------------------------------------------------------------
+      CHARACTER * 1 INDIC_INTER_INTR
+C------------------------------------------------
+C-----Indicateur de présence de défauts complexes
+C------------------------------------------------
+      CHARACTER * 1 INDIC_COMPLEXES
+C---------------------------------------------------------
+C-----Indicateur d'écriture des grandeurs thermodynamiques
+C-----par atome (A/a) ou par maille (M/m)
+C---------------------------------------------------------
+      CHARACTER * 1 INDIC_AT_MAILLE
+C---------------------------------------------------------
+C-----Indicateur d'écriture de l'énergie libre par atome :
+C-----énergie libre totale (T/t) ou de formation (F/f)
+C---------------------------------------------------------
+      CHARACTER * 1 INDIC_G
+C------------------------------------------------------
+C-----Indicateur du mode de calcul (muVT, NPT ou NPT=0)
+C------------------------------------------------------
+      CHARACTER * 10 INDIC_TYP_CALC
+C-------------------------------------------------------------------
+C-----Indicateur de type de calcul NPT(=0)
+C----- * P/p : point (T,x) fixés (modes NPT et NPT=0)
+C----- * T : balayage en température (mode NPT)
+C----- * x : balayage en composition (modes NPT et NPT=0)
+C----- * Tx et xT  : doubles balayages en température et composition
+C-----  --> boucle externe sur T ou x pour Tx ou xT respectivement
+C----- (mode NPT)
+C-------------------------------------------------------------------
+      CHARACTER * 2 INDIC_TYP_CALC_NPT
+C---------------------------------------------------------------
+C-----Produit courant des nombres de pas des éléments d'addition
+C---------------------------------------------------------------
+      INTEGER * 4 PROD_PART_COUR
+C-----------------------------------------------------
+C-----Caractères utiles à la constitution d'un format 
+C-----pour l'écriture d'un nombre variable de colonnes
+C-----(potentiel chimique de chaque espèce,
+C-----fraction atomique de chaque espèce,
+C-----fraction de DP sur le sous-réseau considéré
+C-----et énergie de formation de ce DP)
+C-----------------------------------------------------
+      CHARACTER * 300 CAR_COL_VAR_X_DP
+C------------------------------------------
+C-----Format générique du titre associé
+C-----et format particulier à chaque défaut
+C------------------------------------------
+      CHARACTER * 5000 CAR_TITRE_VAR_X_DP
+      CHARACTER * 5000 CAR_TITRE_VAR_X_DP_TYPE
+C-----------------------------------------
+C-----Idem pour le fichier d'énergie libre
+C-----------------------------------------
+      CHARACTER * 300 CAR_COL_VAR_E_L
+      CHARACTER * 5000 CAR_TITRE_VAR_E_L
+C-------------------------------------------------
+C-----Idem pour le fichier de potentiels chimiques
+C-------------------------------------------------
+      CHARACTER * 300 CAR_COL_VAR_POT_CHIM
+      CHARACTER * 5000 CAR_TITRE_VAR_POT_CHIM
+C-------------------------------------------------
+C-----Idem pour le fichier de pb de conv. de la BA
+C-------------------------------------------------
+      CHARACTER * 300 CAR_COL_VAR_PB_CONV_BA
+      CHARACTER * 5000 CAR_TITRE_VAR_PB_CONV_BA
+C--------------------------------------------------------------------
+C-----Indicateur d'écriture des seuls points contenus dans la fenêtre
+C--------------------------------------------------------------------
+      CHARACTER * 1 INDIC_ECRIT_FENETRE
+C-------------------------------------------------
+C-----Ligne des fractions atomiques dans DATA.adpi
+C-------------------------------------------------
+      CHARACTER * 1000 LIGNE_X_AT
+C--------------------------------------------------------
+C-----Tableaux d'analyse de cette ligne chaîne par chaîne
+C--------------------------------------------------------
+      INTEGER * 4 I_DEBUT ( 1000 )
+      INTEGER * 4 I_FIN ( 1000 )
+      INTEGER * 4 LONG_CHAINE_X_AT ( 1000 )
+      CHARACTER * 1000 CHAINE_X_AT ( 1000 )
+C----------------------------------------------------
+C-----Chaîne totale de suffixe de fractions atomiques
+C----------------------------------------------------
+      CHARACTER * 1000 CHAINE_TOTALE_X_AT
+C--------------------------------
+C-----Facteur thermodynamique k*T
+C--------------------------------
+      REAL * 8 K_T
+C--------------------------------------
+C-----Nombre d'atomes par maille (réel)
+C--------------------------------------
+      REAL * 8 N_AT_MAILLE
+C---------------------------------
+C-----Nombre d'atomes total (réel)
+C-----(pour calcul NPT)
+C---------------------------------
+      REAL * 8 N_AT_TOT
+C-------------------------------------
+C-----Nombre de mailles initial (réel)
+C-----(pour calcul NPT)
+C-------------------------------------
+      REAL * 8 N_MAILLES_INIT
+C-------------------------------------------------
+C-----Fréquence (nombre de pas) de calcul de J_NPT
+C-------------------------------------------------
+      INTEGER * 4 P_J_NPT
+C----------------------------------------
+C-----Fichier de valeurs initiales en NPT
+C----------------------------------------
+      CHARACTER * 200 FICH_VAL_INIT
+C-----------------------------------------------------------
+C-----Caractère indicateur d'écriture d'un fichier
+C-----contenant les compositions où la minimisation a échoué
+C-----(cas NPT=0)
+C-----------------------------------------------------------
+      CHARACTER * 1 CAR_FICH_550
+C----------------------------------------------
+C-----DP chargés : Répertoire et fichier de DdE
+C----------------------------------------------
+      CHARACTER * 200 REP_DDE
+      CHARACTER * 100 FICH_DDE
+C############
+C#####Formats
+C############
+C--------------------
+C-----Sauts de lignes
+C--------------------
+C      INCLUDE
+C     $'format.inc'
+C     ==================================================================
+C     I								       I
+C     I Formats de sauts de lignes				       I
+C     I          						       I
+C     ==================================================================
+C     ==================================================================
+C     I Dernière mise à jour : 21/06/2005                              I
+C     I Saint Louis de Gonzague					       I
+C     ==================================================================
+C--------------------
+C-----Sauts de lignes
+C--------------------
+    1 FORMAT ( / )
+    2 FORMAT ( 2 / )
+    3 FORMAT ( 3 / )
+    4 FORMAT ( 4 / )
+    5 FORMAT ( 5 / )
+    6 FORMAT ( 6 / )
+    7 FORMAT ( 7 / )
+    8 FORMAT ( 8 / )
+    9 FORMAT ( 9 / )
+   10 FORMAT ( 10 / )
+   11 FORMAT ( 11 / )
+   12 FORMAT ( 12 / )
+   13 FORMAT ( 13 / )
+   14 FORMAT ( 14 / )
+   15 FORMAT ( 15 / )
+   16 FORMAT ( 16 / )
+   17 FORMAT ( 17 / )
+   18 FORMAT ( 18 / )
+   19 FORMAT ( 19 / )
+   20 FORMAT ( 20 / )
+C---------------------
+C-----Formats de réels
+C---------------------
+  406 FORMAT ( 6 ( 2X , G12.6 ) )
+  407 FORMAT ( 7 ( 2X , G12.6 ) )
+  408 FORMAT ( 8 ( 2X , G12.6 ) )
+  409 FORMAT ( 9 ( 2X , G12.6 ) )
+  433 FORMAT ( 3 ( 2X , G12.6 ) , 3 ( 5X , G12.6 ) )
+  434 FORMAT ( 3 ( 2X , G12.6 ) , 4 ( 5X , G12.6 ) )
+ 1110 FORMAT ( 'x_at = ' , 100 ( 2X , G16.10 ) )
+ 1111 FORMAT ( 100 ( 2X , G16.10 ) )
+ 1112 FORMAT ( I7 , 100 ( 2X , G16.10 ) )
+C--------------------------------
+C-----Formats du fichier de liste
+C--------------------------------
+ 1100 FORMAT ( 100 ( '=' ) )
+ 1200 FORMAT ( 100 ( '-' ) )
+  501 FORMAT ( 2X , G12.6 )
+  502 FORMAT ( 2X , I4 )
+  503 FORMAT ( 3 ( 2X , I4 ) )
+  504 FORMAT ( 4 ( 2X , I4 ) )
+  505 FORMAT ( 3X , 'Valeur initiale (eV) = ' , G12.6 ,
+     $         4X , 'Nombre de pas = ' , I9 ,
+     $         4X , 'Incrément (eV) = ' , G12.6 )
+  600 FORMAT ( "Nombre de types chimiques : " , 30X , I4 )
+  601 FORMAT ( " Nombre d'éléments d'addition : " , 30X , I4 )
+  602 FORMAT ( "   Nombre de sous-réseaux : " , 36X , I4 )
+  603 FORMAT
+     $ ( '      Nombre de sous-réseaux interstitiels :' , 26X , I4 )
+  604 FORMAT
+     $ ( '        Nombre de types de complexes pris en compte :' ,
+     $   3X , I4 )
+  705 FORMAT ( 15X , 100 ( 2X , I4 ) )
+C-----Formats relatifs aux DP chargés
+ 2000 FORMAT
+     $( 'Charges (unités |e-|) "n, A, p, D" pour le volume de SC =' ,
+     $  F10.3 , ' A^3' )
+ 2001 FORMAT ( 5X , 'Itér.' , 4X , 'mu(e) (eV)' ,
+     $ 6X , '-[Q(n)+Q(A)]' , 6X , '+Q(p)+Q(D)' )
+ 2002 FORMAT ( 5X , 'Itér.' , 4X , 'mu(e) (eV)' ,
+     $ 12X , '-Q(n)', 12X , '-Q(A)' , 12X , '+Q(p)' , 12X , '+Q(D)' ,
+     $ 12X , 'Q(totale)' , 6X , 'dQ(totale)/dmu_e' )
+ 3001 FORMAT ( 2X , I6 , 3 ( 2X , G16.7 ) )
+ 3002 FORMAT ( 2X , I6 , 7 ( 2X , G16.7 ) )
+ 3005 FORMAT ( '              T = ' , F10.2 , ' K' )
+ 3010 FORMAT ( 3 ( 5X , I3 ) , 4X , G16.7  )
+ 3020 FORMAT ( 2 ( 5X , I3 ) , 4X , G16.7  )
+C####################################
+C####################################
+C#####Fin des déclarations et formats
+C####################################
+C####################################
+C-------------------------------------------------------------------
+C-----Ecriture à l'écran des références du programme avant exécution
+C-------------------------------------------------------------------
+        CALL REF_PROG
+C       CALL REF_PROG_DIRECT
+C&&&&& NOTE : la partie "lecture du fichier de données"
+C&&&&& est commune aux cas sans et avec charges
+C&&&&& => elle contient des tests sur la valeur de INDIC_CHARGE
+C&&&&& A l'inverse, la suite du programme est scindée en deux parties,
+C&&&&& la première pour DP non chargés, la seconde pour DP chargés,
+C&&&&& et de tels tests y sont donc inutiles.
+C##################################
+C##################################
+C#####Lecture du fichier de données
+C##################################
+C##################################
+      OPEN ( 10 , FILE = 'DATA.adpi' )
+C########################
+C#####PARAMETRES GENERAUX
+C########################
+C---------------------------------
+C-----Mode d'emploi et commentaire
+C---------------------------------
+      CHAINE_LECT = ''
+      DO WHILE ( CHAINE_LECT ( 1 : 11 ) .NE. 'Commentaire' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+      READ ( 10 , '(A)' ) CHAINE_LECT
+      CHAINE_LECT = ''
+      N_LIGNES_COMMENTAIRE = - 1
+      DO WHILE ( CHAINE_LECT ( 1 : 50 )
+     $          .NE.
+     $'==================================================' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+        N_LIGNES_COMMENTAIRE = N_LIGNES_COMMENTAIRE + 1
+      END DO
+      REWIND ( 10 )
+      CHAINE_LECT = ''
+      DO WHILE ( CHAINE_LECT ( 1 : 11 ) .NE. 'Commentaire' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+      READ ( 10 , '(A)' ) CHAINE_LECT
+      ALLOCATE ( COMMENTAIRE ( N_LIGNES_COMMENTAIRE ) )
+      DO I_LIGNE = 1 , N_LIGNES_COMMENTAIRE
+        READ ( 10 , '(A)' ) COMMENTAIRE ( I_LIGNE )
+      END DO
+C---------------------------------------
+C-----Base du nom des fichiers de sortie
+C---------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , '(A)' ) FICH_FIN
+C--------------------------------------------
+C-----Calcul de la vraie longueur de FICH_FIN
+C--------------------------------------------
+      LONG_FICH_FIN = INDEX ( FICH_FIN , ' ' ) - 1
+C----------------------------------------------------
+C-----Nombres de types chimiques,
+C-----total et intrinsèque (hors éléments d'addition)
+C----------------------------------------------------
+      READ ( 10 , 6 )
+      READ ( 10 , * ) N_TYP , N_TYP_INTR
+C----------------------------------------------
+C-----Interdiction de certains types de calculs
+C----------------------------------------------
+C     IF ( N_TYP .NE. N_TYP_INTR ) 
+C    $ THEN
+C       WRITE ( * , * ) '-----------------------------------'
+C       WRITE ( * , * ) 'Type de calcul :'
+C       WRITE ( * , * ) "éléments d'addition non disponibles"
+C       WRITE ( * , * ) '-----------------------------------'
+C       CALL INTERRUPTION
+C     END IF
+C     IF ( N_TYP .NE. 3 )
+C    $ THEN
+C       WRITE ( * , * ) '-----------------------------------'
+C       WRITE ( * , * ) 'Type de calcul :'
+C       WRITE ( * , * ) 'seul "3 types" possible'
+C       WRITE ( * , * ) '-----------------------------------'
+C       CALL INTERRUPTION
+C     END IF
+C----------------------------------------------------------------
+C-----Nombre de sous-réseaux
+C-----(entendu au sens d'ensemble d'atomes de même environnement)
+C----------------------------------------------------------------
+      READ ( 10 , 5 )
+      READ ( 10 , * ) N_R
+C--------------------------------------------------------
+C-----Présence de sous-réseaux interstitiels (O/o ou N/n)
+C--------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) INDIC_R_INTER
+C----------------------------------------------------------------
+C-----Prise en compte des interstitiels intrinsèques (O/o ou N/n)
+C----------------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) INDIC_INTER_INTR
+      IF ( INDIC_R_INTER .EQ. 'N' .OR. INDIC_R_INTER .EQ. 'n' ) THEN
+        IF ( INDIC_INTER_INTR .EQ. 'O'
+     $  .OR. INDIC_INTER_INTR .EQ. 'o' )
+     $  THEN
+         WRITE ( * , * )
+     $ '----------------------------------------------------'
+         WRITE ( * , * )
+     $ 'Indicateur de présence de sous-réseaux interstitiels = ' ,
+     $   INDIC_R_INTER
+         WRITE ( * , * )
+     $ '=> ne pas sélectionner la prise en compte'
+         WRITE ( * , * )
+     $ 'des interstitiels intrinsèques'
+         WRITE ( * , * )
+     $ '----------------------------------------------------'
+         CALL INTERRUPTION
+        END IF
+      END IF
+C-----------------------------------------------------------------
+C-----Nombres de sous-réseaux occupés par les espèces intrinsèques
+C-----à l'état fondamental
+C-----------------------------------------------------------------
+      ALLOCATE ( N_R_N ( N_TYP_INTR ) )
+        READ ( 10 , 4 )
+        READ ( 10 , * ) 
+     $ ( N_R_N ( I_TYP_INTR ) , I_TYP_INTR = 1 , N_TYP_INTR )
+C-----------------------------------
+C-----Calcul auxiliaire :
+C-----nombres cumulés correspondants
+C-----------------------------------
+      ALLOCATE ( RHO_N ( 0 : N_TYP_INTR ) )
+      RHO_N = 0
+      RHO_N ( 0 ) = 0
+      DO I_TYP = 1 , N_TYP_INTR
+       DO J_TYP = 1 , I_TYP
+        RHO_N ( I_TYP ) = RHO_N ( I_TYP )
+     $                  + N_R_N ( J_TYP )
+       END DO
+      END DO
+C---------------------------------------------------
+C-----Calcul du nombre de sous-réseaux interstitiels
+C---------------------------------------------------
+      N_R_INTER = N_R
+      DO I_TYP_INTR = 1 , N_TYP_INTR
+        N_R_INTER = N_R_INTER - N_R_N ( I_TYP_INTR )
+      END DO
+      IF ( N_R_INTER .LT. 0 ) THEN
+        WRITE ( * , * )
+     $  '------------------------------------------------------------'
+        WRITE ( * , * )
+     $   'Le nombre total de sous-réseaux doit être au moins égal'
+        WRITE ( * , * )
+     $   'à la somme des nombres de sous-réseaux intrinsèques'
+        WRITE ( * , * )
+     $   '(la différence correspondant aux sous-réseaux interstitiels)'
+        WRITE ( * , * )
+     $   '------------------------------------------------------------'
+        CALL INTERRUPTION
+      END IF
+      IF
+     $     ( ( ( INDIC_R_INTER .EQ. 'N' .OR. INDIC_R_INTER .EQ. 'n' )
+     $     .AND. N_R_INTER .GT. 0 )
+     $  .OR. ( ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' )
+     $     .AND. N_R_INTER .EQ. 0 ) )
+     $ THEN
+        WRITE ( * , * )
+     $  '---------------------------------------------------------'
+        WRITE ( * , * )
+     $  'Incohérence entre le nombre de sous-réseaux interstitiels'
+        WRITE ( * , * )
+     $  ' = ' , N_R_INTER
+        WRITE ( * , * )
+     $  "et l'indicateur de présence de ces sous-réseaux"
+        WRITE ( * , * )
+     $  '---------------------------------------------------------'
+        CALL INTERRUPTION
+      END IF
+C-----------------------------------------------------------------
+C-----Etape auxiliaire :
+C-----recopiage des nombres de sous-réseaux par espèce intrinsèque
+C-----(la suite du programme ne gère pas encore N types intrinsèques)
+C-----------------------------------------------------------------
+      N_R_2 = 0
+      N_R_3 = 0
+      N_R_1 = N_R_N ( 1 )
+      IF ( N_TYP_INTR .GT. 1 ) THEN
+        N_R_2 = N_R_N ( 2 )
+        IF ( N_TYP_INTR .GT. 2 ) THEN
+          N_R_3 = N_R_N ( 3 )
+        END IF
+      END IF
+C------------------------------------------------------------------
+C-----Lecture du nombre de sites par maille pour chaque sous-réseau
+C------------------------------------------------------------------
+      ALLOCATE ( P_R ( N_R ) )
+      READ ( 10 , 4 )
+      READ ( 10 , * ) ( P_R ( I_R ) , I_R = 1 , N_R )
+C-----------------------------------------------
+C-----Présence de défauts complexes (O/o ou N/n)
+C-----------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , '(A)' ) INDIC_COMPLEXES
+C-----------------------------------------------------------
+C-----Mise à zéro éventuelle du nombre de types de complexes
+C-----------------------------------------------------------
+       IF ( INDIC_COMPLEXES .EQ. 'N' .OR. INDIC_COMPLEXES .EQ. 'n' ) 
+     $ THEN
+        N_TYPES_COMPLEXES = 0
+      END IF
+C-----------------------------------------------------------
+C-----Température prescrite (K) (non utilisée en mode NPT=0)
+C-----------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) TEMPERATURE
+C-----------------
+C-----Facteur kB*T
+C-----------------
+        K_T = K_B * TEMPERATURE
+C------------------------------
+C-----Pression prescrite (kbar)
+C------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) PRESSION
+C------------------------------------------------------------------
+C-----Energies de référence des diverses espèces chimiques (eV/at.)
+C------------------------------------------------------------------
+      ALLOCATE ( E_REF_TYP ( N_TYP ) )
+      READ ( 10 , 4 )
+      READ ( 10 , * ) ( E_REF_TYP ( I_TYP ) , I_TYP = 1 , N_TYP )
+C----------------------------------------------------
+C-----Choix d'écriture des grandeurs thermodynamiques 
+C-----par atome (A/a) ou par maille (M/m)
+C----------------------------------------------------
+      READ ( 10 , 5 )
+      READ ( 10 , * ) INDIC_AT_MAILLE
+      IF ( .NOT.
+     $    ( INDIC_AT_MAILLE .EQ. 'M' .OR. INDIC_AT_MAILLE .EQ. 'm'
+     $ .OR. INDIC_AT_MAILLE .EQ. 'A' .OR. INDIC_AT_MAILLE .EQ. 'a' ) )
+     $ THEN
+        WRITE ( * , * ) '---------------------------------------'
+        WRITE ( * , * ) 'Ecriture des grandeurs thermodynamiques :'
+        WRITE ( * , * ) 'choisir M/m (maille) ou A/a (atome)'
+        WRITE ( * , * ) '---------------------------------------'
+        CALL INTERRUPTION
+      END IF
+C---------------------------------------------------------
+C-----Indicateur d'écriture de l'énergie libre par atome :
+C-----énergie libre totale (T/t) ou de formation (F/f)
+C---------------------------------------------------------
+      READ ( 10 , 5 )
+      READ ( 10 , * ) INDIC_G
+      IF ( .NOT.
+     $    ( INDIC_G .EQ. 'T' .OR. INDIC_G .EQ. 't'
+     $ .OR. INDIC_G .EQ. 'F' .OR. INDIC_G .EQ. 'f' ) )
+     $ THEN
+        WRITE ( * , * ) '---------------------------------------'
+        WRITE ( * , * ) "Ecriture de l'énergie libre par atome  :"
+        WRITE ( * , * ) 'choisir T/t (totale) ou F/f (formation)'
+        WRITE ( * , * ) '---------------------------------------'
+        CALL INTERRUPTION
+      END IF
+C----------------------------------------------------------------
+C-----Le choix entre énergie libre totale et de formation
+C-----n'est permis que si l'écriture par atome a été sélectionnée
+C-----(sinon, l'option "totale" est seule permise)
+C----------------------------------------------------------------
+      IF ( INDIC_AT_MAILLE .EQ. 'M' .OR. INDIC_AT_MAILLE .EQ. 'm' )
+     $ THEN
+       IF ( INDIC_G .EQ. 'F' .OR. INDIC_G .EQ. 'f' ) THEN
+        WRITE ( * , * ) 
+     $ '------------------------------------------------------'
+        WRITE ( * , * )
+     $ 'Ecriture des grandeurs thermodynamiques par maille'
+        WRITE ( * , * ) 
+     $ "=> seule l'option d'énergie libre totale est autorisée"
+        WRITE ( * , * ) 
+     $ '------------------------------------------------------'
+        CALL INTERRUPTION 
+       END IF
+      END IF
+C----------------------------------------
+C-----Type de calcul (muVT, NPT ou NPT=0)
+C----------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) INDIC_TYP_CALC
+      LONG_INDIC_TYP_CALC = LEN_TRIM ( INDIC_TYP_CALC )
+      IF ( .NOT.
+     $    ( ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' )
+     $ .OR.
+     $    ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT=0' )  
+     $ .OR.
+     $    ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT' ) )
+     $   )
+     $ THEN
+        WRITE ( * , * ) '--------------------------'
+        WRITE ( * , * ) 'Type de calcul :'
+        WRITE ( * , * ) 'choisir muVT, NPT ou NPT=0'
+        WRITE ( * , * ) '--------------------------'
+        CALL INTERRUPTION
+      END IF
+C---------------------------------------------------   
+C-----La prise en compte de complexes n'est possible
+C-----que pour un calcul muVT
+C---------------------------------------------------   
+      IF ( .NOT.
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' )  
+     $ .AND.
+     $ ( INDIC_COMPLEXES .EQ. 'O' .OR. INDIC_COMPLEXES .EQ. 'o' ) )
+     $ THEN
+        WRITE ( * , * )  
+     $ '----------------------------------------------'
+        WRITE ( * , * ) 
+     $ "La prise en compte de complexes n'est possible"
+        WRITE ( * , * )  
+     $ 'que pour un calcul muVT'
+        WRITE ( * , * )  
+     $ '----------------------------------------------'
+        CALL INTERRUPTION
+      END IF 
+C----------------------------------------------
+C-----Interdiction de certains types de calculs
+C-----(pour produire une version "bridée")
+C----------------------------------------------
+C     IF ( .NOT.
+C    $ ( ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' ) )
+C    $   )
+C    $ THEN
+C       WRITE ( * , * ) '--------------------'
+C       WRITE ( * , * ) 'Type de calcul :'
+C       WRITE ( * , * ) 'muVT seul disponible'
+C       WRITE ( * , * ) '--------------------'
+C       CALL INTERRUPTION
+C     END IF
+C-----------------------------------
+C-----Indicateur (0/1) de DP chargés
+C-----------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) INDIC_CHARGE
+      IF ( .NOT. ( INDIC_CHARGE .EQ. 0 .OR. INDIC_CHARGE .EQ. 1 ) ) THEN
+        write (* , * ) "Vérifier INDIC_CHARGE = 0/1"
+        stop
+      END IF
+C=======================================================
+C=====Sous-section "paramètres généraux pour DP chargés"
+C=====(lecture optionnelle si INDIC_CHARGE = 1)
+C=======================================================
+       IF ( INDIC_CHARGE .EQ. 1 ) THEN
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 13 : 57 )
+     $   .NE. 'Sous-section générale relative aux DP chargés' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C--------------------------------------------------------------------
+C-----Nombre maximum d'états de chargés considérés
+C-----et type de calcul (1=balayage en mu_e, 2=neutralité électrique)
+C--------------------------------------------------------------------
+      READ ( 10 , 6 )
+      READ ( 10 , * ) N_MAX_CHARGES , I_CALC_CHARGE
+C-------------------------------------------------------
+C-----Présence de défauts complexes chargés (O/o ou N/n)
+C-------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , '(A)' ) INDIC_COMPLEXES_Q
+C-----INDIC_COMPLEXES ne contrôle que les complexes non chargés
+C-----et n'est pas utilisé en cas de DP chargés.
+C-----Cependant, pour la clarté, on impose la cohérence
+C-----entre INDIC_COMPLEXES et INDIC_COMPLEXES_Q
+C-----(car INDIC_COMPLEXES est dans les "paramètres généraux"
+C-----et est donc requis, comme INDIC_COMPLEXES_Q, en cas de DP chargés)
+C----- INDIC_COMPLEXES_Q = O ==> INDIC_COMPLEXES = O
+C----- INDIC_COMPLEXES_Q = N ==> INDIC_COMPLEXES = N
+      IF ( INDIC_COMPLEXES_Q .EQ. 'o' .OR. INDIC_COMPLEXES_Q .EQ. 'O' )
+     $ THEN
+        IF ( INDIC_COMPLEXES .EQ. 'n' .OR. INDIC_COMPLEXES .EQ. 'N' )
+     $  THEN
+         write(*,*) "Présence de complexes chargés"
+         write(*,*) "==> activer aussi INDIC_COMPLEXES (champ avant T)"
+         WRITE(*,*)
+         stop
+        END IF
+      END IF
+      IF ( INDIC_COMPLEXES_Q .EQ. 'n' .OR. INDIC_COMPLEXES_Q .EQ. 'N' )
+     $ THEN
+        IF ( INDIC_COMPLEXES .EQ. 'o' .OR. INDIC_COMPLEXES .EQ. 'O' )
+     $  THEN
+         write(*,*) "Absence de complexes chargés"
+         write(*,*)
+     $   "==> désactiver aussi INDIC_COMPLEXES (champ avant T)"
+         WRITE(*,*)
+         stop
+        END IF
+      END IF
+C-------------------------------------------------------------------
+C-----Mise à zéro éventuelle du nombre de types de complexes chargés
+C-------------------------------------------------------------------
+       IF ( INDIC_COMPLEXES_Q .EQ. 'N' .OR. INDIC_COMPLEXES_Q .EQ. 'n' )
+     $ THEN
+        N_TYPES_COMPLEXES_Q = 0
+      END IF
+C-----------------------------------------------------
+C-----Les DP chargés ne sont pris en compte qu'en muVT
+C-----------------------------------------------------
+      IF ( INDIC_CHARGE .EQ. 1 ) THEN
+        IF
+     $ ( .NOT.
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' ) )
+     $ THEN
+       WRITE ( * , * ) '-------------------------'
+       WRITE ( * , * ) 'Traitement des DP chargés :'
+       WRITE ( * , * ) 'seulement en mode muVT'
+       WRITE ( * , * ) '-------------------------'
+       CALL INTERRUPTION
+       END IF
+      END IF
+C-----------------------------------------------
+C-----Energies du maximum de la bande de valence
+C-----et du minimum de la bande de conduction
+C-----------------------------------------------
+      READ ( 10 , 5 )
+      READ ( 10 , * ) E_MAX_BV , E_MIN_BC
+C--------------------------------------------------------
+C-----Potentiel chimique électronique
+C-----valeur initiale (mode 2) ou minimale (mode 1),
+C-----puis incrément (mode 1) et valeur maximale (mode 1)
+C--------------------------------------------------------
+      READ ( 10 , 6 )
+      READ ( 10 , * ) POT_CHIM_ELEC ,
+     $                D_POT_CHIM_ELEC , POT_CHIM_ELEC_MAX
+C---------------------------------
+C-----Répertoire et fichier de DdE
+C---------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , ' ( A ) ' ) REP_DDE
+      LONG_REP_DDE = INDEX ( REP_DDE , ' ' ) - 1
+      READ ( 10 , 4 )
+      READ ( 10 , ' ( A ) ' ) FICH_DDE
+      LONG_FICH_DDE = INDEX ( FICH_DDE , ' ' ) - 1
+C-----------------------------------------------
+C-----Précision d'arrêt et nombre maximum de pas
+C-----pour l'algorithme NR "électronique"
+C-----------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) EPS , N_MAX_PAS_NR_ELEC
+C-----Fin de lecture optionnelle des paramètres généraux pour DP chargés
+      END IF
+C##########################################################
+C#####Fin de la lecture de la section "PARAMETRES GENERAUX"
+C##########################################################
+C===================================================
+C=====Ouverture préliminaire de tableaux nécessaires 
+C=====à la lecture des sections suivantes
+C===================================================
+C---------------------------------------------------------------------
+C-----Fractions atomiques dans l'alliage
+C-----telles que fixées par les potentiels chimiques
+C-----et fractions atomiques
+C-----déduites de la valeur pour l'élément spécifié et des contraintes
+C---------------------------------------------------------------------
+      ALLOCATE ( X_AT ( N_TYP ) )
+      ALLOCATE ( X_AT_0_CTR ( N_TYP ) )
+C----------------------------------------------------------------
+C-----Paramètres pertinents seulement si N_TYP > 2,
+C-----et même seulement en muVT pour X_AT_INF_CTR et X_AT_SUP_CTR
+C-----(tableaux ouverts dans tous les cas néanmoins)
+C----------------------------------------------------------------
+      ALLOCATE ( COEF_CTR ( N_TYP - 1 , N_TYP + 1 ) )
+      ALLOCATE ( D_X_AT ( N_TYP ) )
+      ALLOCATE ( D_X_AT_INIT ( N_TYP ) )
+      ALLOCATE ( X_AT_INF_CTR ( N_TYP ) )
+      ALLOCATE ( X_AT_SUP_CTR ( N_TYP ) )
+C###########################################################
+C#####PARAMETRES RELATIFS A UN CALCUL NPT / NPT=0
+C#####Champs lus et utilisés seulement si calcul NPT / NPT=0
+C###########################################################
+C-----Test sur le type de calcul : autre que muVT ?
+      IF
+     $ ( .NOT.
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' ) )
+     $ THEN
+C------------------------------------------------
+C-----Recherche de l'en-tête de la grande section
+C------------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 49 )
+     $   .NE. 'PARAMETRES RELATIFS A UN CALCUL NPT ou NPT=0' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+C-----Lecture de l'indicateur de type de calcul NPT(=0) :
+C-----* P/p : point (T,x) fixés (modes NPT et NPT=0)
+C-----* T : balayage en température (mode NPT)
+C-----* x : balayage en composition (modes NPT et NPT=0)
+C-----* Tx et xT  : doubles balayages en température et composition
+C----- --> boucle externe sur T ou x pour Tx ou xT respectivement
+C-----(mode NPT)
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 36 )
+     $   .NE. 'Indicateur de type de calcul NPT(=0)' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 5 )
+        READ ( 10 , '(A)' ) INDIC_TYP_CALC_NPT
+        LONG_INDIC_TYP_CALC_NPT = LEN_TRIM ( INDIC_TYP_CALC_NPT )
+C- - - - - - - - - - - - - - - - - - - - - - - 
+C- - -Test sur la validité de cet indicateur lu
+C- - - - - - - - - - - - - - - - - - - - - - - 
+        IF ( .NOT.
+     $    ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'P'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'p'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'x'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'T'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'Tx'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'xT'
+     $ ) ) THEN
+         WRITE ( * , * ) 
+     $ '------------------------------------'
+         WRITE ( * , * )
+     $ 'Indicateur de type de calcul NPT(=0) :'
+         WRITE ( * , * ) 
+     $ 'P/p : point (T,x)'
+         WRITE ( * , * )
+     $  'T : balayage en température'
+         WRITE ( * , * ) 
+     $  'x : balayage en composition'
+         WRITE ( * , * )
+     $  'Tx ou xT : doubles balayages'
+         WRITE ( * , * ) 
+     $ '------------------------------------'
+         CALL INTERRUPTION
+        END IF
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - 
+C- - -Fin du test sur la validité de cet indicateur lu
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - 
+C-----Avertissement concernant le mode NPT(Tx)
+C     IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT )
+C    $  .EQ. 'Tx' ) THEN
+C       write(*,*) "************************************************"
+C       write(*,*) "Vous avez sélectionné le mode NPT(Tx)."
+C       write(*,*) "Cependant, à l'inverse de son homologue NPT(xT),"
+C       write(*,*) "ce mode n'a pas été testé sur divers exemples."
+C       write(*,*) "==> Il serait préférable de privilégier NPT(xT)."
+C       write(*,*) "Si vous souhaitez poursuivre tout de même"
+C       write(*,*) "en mode NPT(Tx), veuillez presser une touche."
+C       write(*,*) "************************************************"
+C       read(*,*)
+C     END IF
+C- - - - - - - - - - - - - - - - - - - - - - - - - - -
+C- - -Second test : en mode NPT=0, seules les options
+C- - -"P/p" et "x" sont possibles.
+C- - - - - - - - - - - - - - - - - - - - - - - - - - -
+       IF ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT=0' )
+     $ THEN
+        IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'T'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'Tx'
+     $ .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'xT'
+     $ ) THEN
+         WRITE ( * , * )
+         WRITE ( * , * )
+     $ 'Mode NPT=0 ==> options possibles = "P/p" ou "x"'
+         WRITE ( * , * )
+         CALL INTERRUPTION
+       END IF
+      END IF
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+C- - -Troisième test : dans le cas d'un calcul NPT=0 avec N_TYP # 3
+C- - -(section PARAMETRES GENERAUX), l'option "x" n'est pas possible
+C- - -(seule l'option "P/p" est possible).
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT )
+     $  .EQ. 'x' ) THEN
+       IF ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT=0' 
+     $ .AND. N_TYP .NE. 3 ) THEN 
+        WRITE ( * , * )
+        WRITE ( * , * )
+     $ "Système avec N_TYP # 3 types chimiques + mode NPT=0 :"
+        WRITE ( * , * )
+     $ 'option "x" impossible, choisir "P/p"'
+        WRITE ( * , * )
+        CALL INTERRUPTION
+       END IF
+      END IF
+C----------------------------------------------------
+C----------------------------------------------------
+C-----Lecture optionnelle des champs relatifs aux cas
+C-----impliquant un calcul en un point de composition,
+C-----i.e. en NPT(T), NPT(p) et NPT=0(p)
+C----- --> fractions atomiques de l'alliage
+C-----dont la somme doit valoir 1
+C-----------------------------------------------------
+C-----------------------------------------------------
+        IF ( 
+     $                     INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'P'
+     $                .OR. INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'p'
+     $         .OR. (
+     $                     INDIC_TYP_CALC
+     $                   ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT' 
+     $               .AND. INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'T' 
+     $              ) 
+     $      ) THEN
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 42 )
+     $   .NE. "Cas d'un calcul en un point de composition" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 2 )
+        READ ( 10 , * )
+     $ ( X_AT ( I_TYP ) , I_TYP = 1 , N_TYP )
+C- - - - - - - - - - - - - - - - - - - - - - - -
+C- - -Vérification de somme(x_at)=1
+C- - -dans les cas où cette donnée est utilisée
+C- - -i.e. pour NPT(T), NPT(p) et NPT=0(p)
+C- - - - - - - - - - - - - - - - - - - - - - - -
+         IF
+     $ ( .NOT.
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' ) )
+     $ THEN
+        IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'P'
+     $  .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'p'
+     $  .OR. INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'T'
+     $ ) THEN
+        SOMME_VERIF = 0.D0
+        DO I_TYP = 1 , N_TYP
+          SOMME_VERIF = SOMME_VERIF + X_AT ( I_TYP )
+        END DO
+        IF ( DABS ( SOMME_VERIF - 1.D0 ) .GT. 1.D-12 ) THEN
+          WRITE ( * , * ) 
+     $ '----------------------------------------------'
+          WRITE ( * , * )
+     $ 'Calcul NPT(T) ou NPT(p/P) :'
+          WRITE ( * , * )
+     $ 'la somme des fractions atomiques doit valoir 1'
+          WRITE ( * , * ) 
+     $ '----------------------------------------------'
+          CALL INTERRUPTION
+        END IF
+       END IF
+      END IF
+C- - - - - - - - - - - - - - - - - - - - - - - -
+C- - -Fin de vérification de somme(x_at)=1
+C- - -dans les cas où cette donnée est utilisée
+C- - -i.e. pour NPT(T), NPT(p) et NPT=0(p)
+C- - - - - - - - - - - - - - - - - - - - - - - -
+C----------------------------------------------------------
+C----------------------------------------------------------
+C-----Fin de lecture optionnelle des champs relatifs au cas
+C-----d'un calcul en un point de composition
+C----------------------------------------------------------
+C----------------------------------------------------------
+      END IF
+C-----------------------------------------------------
+C-----------------------------------------------------
+C-----Lecture optionnelle des champs pour le cas
+C-----d'un balayage "r,theta" en composition
+C-----autour de la stoechiométrie :
+C-----nombre de pas angulaires entre 0 et 2 pi,
+C-----"r" maximal (entre 0 et 1),
+C-----nombre de pas entre 0 et r_max
+C----- --> seulement en NPT=0, et pour un balayage "x"
+C-----------------------------------------------------
+C-----------------------------------------------------
+      IF
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT=0' )
+     $ THEN
+          IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT )
+     $        .EQ. 'x' ) THEN
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 42 )
+     $   .NE. "Cas d'un balayage (r,theta) en composition" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 3 ) 
+        READ ( 10 , * ) N_PAS_THETA , R_MAX , N_PAS_R
+C------------------------------------------------------
+C------------------------------------------------------
+C-----Fin de lecture optionnelle des champs pour le cas
+C-----d'un balayage "r,theta" en composition
+C----- --> seulement en NPT=0, et pour un balayage "x"
+C------------------------------------------------------
+C------------------------------------------------------
+       END IF
+      END IF
+C----------------------------------------------------------------------
+C----------------------------------------------------------------------
+C-----Lecture optionnelle des champs pour le cas
+C-----d'un balayage en T ou en fraction atomique pour l'espèce choisie
+C----- --> seulement en NPT, et pour un balayage "x", "T", "Tx" ou "xT"
+C----------------------------------------------------------------------
+C----------------------------------------------------------------------
+      IF
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT' )
+     $ THEN
+C- - - - - - - - - - - - - -
+C- - -Cas d'un balayage "x"
+C- - - - - - - - - - - - - -
+       IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT )
+     $ .EQ. 'x' ) THEN
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+          REWIND ( 10 )
+          CHAINE_LECT = ''
+          DO WHILE ( CHAINE_LECT ( 1 : 34 )
+     $     .NE. "Nombre de pas en fraction atomique" )
+            READ ( 10 , '(A)' ) CHAINE_LECT
+          END DO
+C------------
+C-----Lecture
+C------------
+          READ ( 10 , 1 )
+          READ ( 10 , * ) N_PAS_X_TYP_0
+C- - - - - - - - - - - - - -
+C- - -Cas d'un balayage "T"
+C- - - - - - - - - - - - - -
+        ELSE IF ( INDIC_TYP_CALC_NPT ( 1 : LONG_INDIC_TYP_CALC_NPT )
+     $  .EQ. 'T' ) THEN
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 18 )
+     $   .NE. "Nombre de pas en T" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 1 )
+        READ ( 10 , * ) N_PAS_T
+C- - - - - - - - - - - - - - - - - -
+C- - -Cas d'un balayage "Tx" ou "xT"
+C- - - - - - - - - - - - - - - - - -
+        ELSE IF ( INDIC_TYP_CALC_NPT
+     $          ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'Tx'
+     $       .OR. INDIC_TYP_CALC_NPT
+     $          ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'xT' 
+     $          )  THEN
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+          REWIND ( 10 )
+          CHAINE_LECT = ''
+          DO WHILE ( CHAINE_LECT ( 1 : 34 )
+     $     .NE. "Nombre de pas en fraction atomique" )
+            READ ( 10 , '(A)' ) CHAINE_LECT
+          END DO
+C------------
+C-----Lecture
+C------------
+          READ ( 10 , 1 )
+          READ ( 10 , * ) N_PAS_X_TYP_0
+C----------------------------------------------
+C-----Recherche de l'en-tête de la sous-section
+C----------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 18 )
+     $   .NE. "Nombre de pas en T" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 1 )
+        READ ( 10 , * ) N_PAS_T
+C----------------------------------------------------------------------
+C----------------------------------------------------------------------
+C-----Fin de lecture optionnelle des champs pour le cas
+C-----d'un balayage en T ou en fraction atomique pour l'espèce choisie
+C----- --> seulement en NPT, et pour un balayage "x", "T", "Tx" ou "xT"
+C----------------------------------------------------------------------
+C----------------------------------------------------------------------
+        END IF
+       END IF
+C-----Fin du test de type "autre que muVT"
+      END IF
+C##################################################
+C#####Fin de la lecture de la section
+C#####"PARAMETRES RELATIFS A UN CALCUL NPT / NPT=0"
+C##################################################
+C###########################################################
+C#####PARAMETRES RELATIFS A UN CALCUL muVT ou NPT
+C#####Champs lus et utilisés seulement si calcul muVT ou NPT
+C###########################################################
+C-----Test du type de calcul : NPT ou muVT
+      IF ( .NOT.
+     $    ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT=0' ) )
+     $ THEN
+C============================================
+C============================================
+C=====Section lue seulement si DP non chargés
+C============================================
+C============================================
+       IF ( INDIC_CHARGE .EQ. 0 ) THEN
+C-------------------------------------------------------
+C-----Recherche de l'en-tête de section
+C-----(devenue inutile car en-têtes intérieurs utilisés) 
+C-------------------------------------------------------
+C       REWIND ( 10 )
+C       CHAINE_LECT = ''
+C       DO WHILE ( CHAINE_LECT ( 6 : 50 )
+C    $   .NE. 'PARAMETRES RELATIFS A UN CALCUL muVT ou NPT' )
+C         READ ( 10 , '(A)' ) CHAINE_LECT
+C       END DO
+C======================================================================
+C=====1) Champs à inclure ssi N_TYP > 2, en NPT(x/Tx/xT) comme en muVT
+C===== --> système de N_TYP - 2 contraintes
+C=====y compris en muVT lorsque le filtre "fenêtres"
+C=====n'est pas sélectionné 
+C=====(cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+C=====bien que ces champs soient alors inutilisés dans ce cas.
+C======================================================================
+         IF ( 
+     $                       N_TYP .GT. 2 
+     $   .AND. (
+     $                       INDIC_TYP_CALC
+     $                     ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT'
+     $        .OR. (
+     $                       INDIC_TYP_CALC
+     $                     ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT'
+     $          .AND. (
+     $                       INDIC_TYP_CALC_NPT
+     $                     ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'x'
+     ^                  .OR. INDIC_TYP_CALC_NPT
+     $                     ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'Tx'
+     $                  .OR. INDIC_TYP_CALC_NPT
+     $                     ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'xT'
+     $                )
+     $            )
+     $        )
+     $     ) THEN
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 44 )
+     $   .NE. 'Coefficients (a,b) des N_TYP - 2 contraintes' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C---------------------------------------------------
+C-----Coefficients de contraintes sur la composition
+C-----sous la forme a(k,i)x(i)+b(k) = 0
+C-----(seulement si N_TYP > 2)
+C---------------------------------------------------
+        READ ( 10 , 6 )
+        DO I_TYP = 1 , N_TYP - 2
+         READ ( 10 , * )
+     $ ( COEF_CTR ( I_TYP , J_TYP ) , J_TYP = 1 , N_TYP + 1 )
+        END DO
+C----------------------------------------------------------------------
+C-----La N_TYP - 1 ème contrainte est l'unité de la somme des fractions
+C----------------------------------------------------------------------
+       DO I_TYP = 1 , N_TYP
+        COEF_CTR ( N_TYP - 1 , I_TYP ) = 1.D0
+       END DO
+       COEF_CTR ( N_TYP - 1 , N_TYP + 1 ) = 0.D0
+C===================================================
+C=====Fin des données 1) lues seulement si N_TYP > 2
+C=====en NPT(x/Tx/xT) comme en muVT
+C===================================================
+      END IF
+C======================================================================
+C=====2) Champs à inclure (i) en NPT(x/Tx/xT),
+C=====                    (ii) en muVT si N_TYP > 2,
+C=====y compris en muVT lorsque le filtre "fenêtres"
+C=====n'est pas sélectionné
+C=====(cf. section suivante "PARAMETRES SPECIFIQUES A UN CALCUL muVT"),
+C=====bien que ces champs soient alors inutilisés dans ce cas.
+C======================================================================
+         IF ( 
+     $         ( 
+     $                     INDIC_TYP_CALC
+     $                   ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT'
+     $        .AND. (
+     $                     INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'x'
+     $                .OR. INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'Tx'
+     $                .OR. INDIC_TYP_CALC_NPT
+     $                   ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. 'xT' 
+     $              )
+     $        )
+     $   .OR. (
+     $                    INDIC_TYP_CALC
+     $                  ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT'
+     $              .AND. N_TYP .GT. 2 
+     $        )
+     $     ) THEN
+C-------------------------------------------------------
+C-------------------------------------------------------
+C-----Elément dont on étudie l'effet de l'enrichissement
+C-----(toutes les autres fractions atomiques
+C-----sont fixées dans des fenêtres à l'écriture)
+C-----(toujours utilisé en NPT(x/Tx/xT),
+C-----utilisé si N_TYP > 2 en muVT)
+C-------------------------------------------------------
+C-------------------------------------------------------
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 50 )
+     $   .NE. "Elément dont on étudie l'effet de l'enrichissement" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 5 )
+        READ ( 10 , * ) I_TYP_0
+C--------------------------------------------------------------
+C--------------------------------------------------------------
+C-----Valeurs initiale et finale de fraction atomique écrite
+C-----pour l'élément spécifié (dont on étudie l'enrichissement)
+C-----(toujours utilisé en NPT(x/Tx/xT), 
+C-----utilisé si N_TYP > 2 en muVT)
+C--------------------------------------------------------------
+C--------------------------------------------------------------
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 50 )
+     $   .NE. "Valeurs extrémales du domaine de fraction atomique" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 5 )
+        READ ( 10 , * ) X_TYP_0_INIT , X_TYP_0_FIN
+C-----Test préliminaire
+        IF ( X_TYP_0_INIT .LT. 0.D0
+     $  .OR. X_TYP_0_FIN .LT. 0.D0 ) THEN
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+          WRITE ( * , * )
+     $ 'Valeurs initiale et finale de fraction atomique écrite'
+          WRITE ( * , * )
+          WRITE ( * , * )
+     $ "pour l'élément spécifié (dont on étudie l'enrichissement) :"
+          WRITE ( * , * )
+     $ 'on doit avoir x_init > 0 et x_fin > 0'
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+        CALL INTERRUPTION
+        END IF
+C--------------------------------------------------------
+C-----En plus de leur emploi en mode NPT(x/Tx/xT),
+C-----X_TYP_0_INIT et X_TYP_0_FIN servent aussi à affecter
+C-----X_AT_INF_CTR et X_AT_SUP_CTR, qui sont utilisés
+C-----seulement en mode muVT si N_TYP > 2.
+C--------------------------------------------------------
+         X_AT_INF_CTR ( I_TYP_0 ) = X_TYP_0_INIT
+         X_AT_SUP_CTR ( I_TYP_0 ) = X_TYP_0_FIN
+C=======================================================
+C=====Fin de la lecture optionnelle
+C=====des données 2) toujours utilisées en NPT(x/Tx/xT),
+C=====ou utilisées si N_TYP > 2 en muVT
+C=======================================================
+        END IF
+C===================================
+C===================================
+C=====Fin du test "DP non chargés ?"
+C===================================
+C===================================
+       END IF
+C-----Fin du test sur le type de calcul (NPT ou muVT)
+      END IF
+C##################################################
+C#####Fin de la lecture de la section
+C#####"PARAMETRES RELATIFS A UN CALCUL muVT ou NPT"
+C##################################################
+C####################################################
+C#####PARAMETRES SPECIFIQUES A UN CALCUL muVT
+C#####Champs lus et utilisés seulement si calcul muVT
+C####################################################
+C-----Test sur le type de calcul : muVT ?
+      IF ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'muVT' )
+     $ THEN  
+C-------------------------------------------------------
+C-----Recherche de l'en-tête de section
+C-----(devenue inutile car en-têtes intérieurs utilisés) 
+C-------------------------------------------------------
+C       REWIND ( 10 )
+C       CHAINE_LECT = ''
+C       DO WHILE ( CHAINE_LECT ( 6 : 44 )
+C    $   .NE. 'PARAMETRES SPECIFIQUES A UN CALCUL muVT' )
+C         READ ( 10 , '(A)' ) CHAINE_LECT
+C       END DO
+C============================================
+C============================================
+C=====Premier cas de lecture : DP non chargés
+C===== --> balayage en mu_i
+C============================================
+C============================================
+       IF ( INDIC_CHARGE .EQ. 0 ) THEN
+C--------------------------------------------------------
+C--------------------------------------------------------
+C-----Type chimique intrinsèque de référence
+C-----pour les potentiels chimiques,
+C-----précision et nombre maximum d'itérations
+C-----pour l'arrêt de la boucle d'autocohérence sur POT_1
+C--------------------------------------------------------
+C--------------------------------------------------------
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 42 )
+     $   .NE. '(i) Type chimique intrinsèque de référence' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+       READ ( 10 , 3 )
+       READ ( 10 , * ) I_TYP_REF_MU , PRECISION_MU_1 , N_ITER_MAX_MU_1
+C-----------------
+C-----Vérification
+C-----------------
+      IF ( N_ITER_MAX_MU_1 .LT. 1 ) THEN
+       write(*,*)
+     $ " *** PROGRAMME INTERROMPU ***"
+       write(*,*)
+     $ "Autocohérence sur mu1 -> vérifier que N_ITER_MAX_MU_1 > 0"
+       write(*,*)
+     $ "(N_ITER_MAX_MU_1 = 1 ==> pas d'autocohérence)"
+        stop
+      END IF
+C----------------------------------------
+C-----La suite du programme ne fonctionne
+C-----que si le type de référence est 1
+C----------------------------------------
+      if ( I_TYP_REF_MU .ne. 1 ) then
+        write ( * , * ) 'La présente version ne fonctionne'
+        write ( * , * ) 'que pour type_réf.(mu) = 1'
+        call interruption
+      end if
+C========================================
+C=====Données lues seulement si N_TYP > 2
+C========================================
+       IF ( N_TYP .GT. 2 ) THEN
+C--------------------------------------------------------------------
+C--------------------------------------------------------------------
+C-----Indicateur d'écriture des seuls points contenus dans la fenêtre
+C-----(indicateur lu seulement pour plus de 2 types)
+C--------------------------------------------------------------------
+C--------------------------------------------------------------------
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 47 )
+     $   .NE. "Indicateur d'écriture des seuls points contenus" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 1 )
+        READ ( 10 , '(A)' ) INDIC_ECRIT_FENETRE
+        IF ( INDIC_ECRIT_FENETRE .EQ. 'O'
+     $  .OR. INDIC_ECRIT_FENETRE .EQ. 'o' ) THEN 
+          I_ECRIT_FENETRE = 1
+        ELSE IF ( INDIC_ECRIT_FENETRE .EQ. 'N'
+     $       .OR. INDIC_ECRIT_FENETRE .EQ. 'n' ) THEN
+          I_ECRIT_FENETRE = 0
+        ELSE
+          WRITE ( * , * ) 
+     $          '----------------------------------------------'
+          WRITE ( * , * ) 
+     $          "Indicateur d'écriture des points  : O/o ou N/n" 
+          WRITE ( * , * ) 
+     $          '----------------------------------------------'
+          CALL INTERRUPTION
+        END IF
+C------------------------------------------------
+C------------------------------------------------
+C-----Demi-largeurs des fenêtres en composition
+C-----pour les éléments autres que celui spécifié
+C-----(seulement si N_TYP > 2)
+C------------------------------------------------
+C------------------------------------------------
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 42 )
+     $   .NE. "Demi-largeurs des fenêtres en composition" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 3 )
+        READ ( 10 , * )
+     $ ( D_X_AT_INIT ( I_TYP ) , I_TYP = 1 , N_TYP - 1 ) 
+        I = 0
+        DO I_TYP = 1 , I_TYP_0 - 1
+          I = I + 1
+          D_X_AT ( I_TYP ) = D_X_AT_INIT ( I )
+        END DO
+        DO I_TYP = I_TYP_0 + 1 , N_TYP
+          I = I + 1
+          D_X_AT ( I_TYP ) = D_X_AT_INIT ( I )
+        END DO
+C----------------------------------------------------------
+C-----Dans le cas où N_TYP = 2, rien n'est lu
+C-----mais il faut tout de même initialiser I_ECRIT_FENETRE
+C----------------------------------------------------------
+      ELSE
+        I_ECRIT_FENETRE = 0
+C=============================================================
+C=====Fin de la lecture des paramètres pertinents si N_TYP > 2
+C=============================================================
+      END IF
+C-----------------------------------------------------------
+C-----Recherche de l'en-tête de la sous-section muVT
+C-----sur les balayages en mu(intrinsèques) et mu(additions)
+C-----(permet de sauter la section optionnelle précédente)
+C-----------------------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 15 : 54 )
+     $ .NE. 'Sous-section muVT relative aux balayages' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+        READ ( 10 , '(A)' ) CHAINE_LECT
+C-----------------------------------------------------------------
+C-----------------------------------------------------------------
+C-----Propriétés des séries d'écarts de potentiels chimiques
+C-----pour les éléments intrinsèques autres que celui de référence
+C-----------------------------------------------------------------
+C-----------------------------------------------------------------
+      ALLOCATE ( D_POT_REF_INTR_INIT ( N_TYP_INTR ) )
+      ALLOCATE ( N_D_POT_REF_INTR ( N_TYP_INTR ) )
+      ALLOCATE ( PAS_D_POT_REF_INTR ( N_TYP_INTR ) )
+C--------------------------------------------------
+C-----Initialisations (à 1 pour les nombres de pas)
+C--------------------------------------------------
+      D_POT_REF_INTR_INIT = 0.D0
+      N_D_POT_REF_INTR = 1
+      PAS_D_POT_REF_INTR = 0.D0
+C------------
+C-----Lecture
+C------------
+      DO I_TYP = 1 , N_TYP_INTR
+       IF ( I_TYP .NE. I_TYP_REF_MU ) THEN 
+        READ ( 10 , 7 )
+        READ ( 10 , * ) D_POT_REF_INTR_INIT ( I_TYP ) ,
+     $                  N_D_POT_REF_INTR ( I_TYP ) ,
+     $                  PAS_D_POT_REF_INTR ( I_TYP )
+        END IF
+       END DO
+C-------------
+C-----Ecriture
+C-------------
+C     DO I_TYP = 1 , N_TYP_INTR
+C       write ( * , * ) D_POT_REF_INTR_INIT ( I_TYP ) ,
+C    $                  N_D_POT_REF_INTR ( I_TYP ) ,
+C    $                  PAS_D_POT_REF_INTR ( I_TYP )
+C      END DO
+C-------------------------------------------------------------------
+C-----Connexion avec la suite du programme, dont la présente version
+C-----ne fonctionne pas pour plus de 3 types intrinsèques
+C-----(même problème que plus haut pour N_R_1, N_R_2 et N_R_3)
+C-------------------------------------------------------------------
+      IF ( N_TYP_INTR .GE. 2 ) THEN
+        D_POT_INIT_2_1 =  D_POT_REF_INTR_INIT ( 2 )
+        N_D_POT_2_1 = N_D_POT_REF_INTR ( 2 )
+        PAS_D_POT_2_1 = PAS_D_POT_REF_INTR ( 2 )
+        IF ( N_TYP_INTR .GT. 2 ) THEN
+         D_POT_INIT_3_1 =  D_POT_REF_INTR_INIT ( 3 )
+         N_D_POT_3_1 = N_D_POT_REF_INTR ( 3 )
+         PAS_D_POT_3_1 = PAS_D_POT_REF_INTR ( 3 )
+        ELSE
+         N_D_POT_3_1 = 1
+        END IF
+      ELSE
+        N_D_POT_2_1 = 1
+        N_D_POT_3_1 = 1
+      END IF
+C---------------------------------------------------
+C---------------------------------------------------
+C-----Propriétés des séries des mu_i (additions)
+C-----La boucle de N_TYP_INTR + 1 à N_TYP ci-dessous
+C-----permet de ne rien lire
+C-----en cas d'alliage sans addition
+C---------------------------------------------------
+C---------------------------------------------------
+      ALLOCATE ( POT_I_INIT ( N_TYP_INTR + 1 : N_TYP ) )
+      ALLOCATE ( N_POT_I ( N_TYP_INTR + 1 : N_TYP ) )
+      ALLOCATE ( PAS_POT_I ( N_TYP_INTR + 1 : N_TYP ) ) 
+      DO I_TYP = N_TYP_INTR + 1 , N_TYP 
+        READ ( 10 , 7 )
+        READ ( 10 , * ) POT_I_INIT ( I_TYP ) ,
+     $                  N_POT_I ( I_TYP ) ,
+     $                  PAS_POT_I ( I_TYP )
+       END DO
+C=========================================
+C=========================================
+C=====Deuxième cas de lecture : DP chargés
+C===== --> pas de balayage en mu_i
+C=========================================
+C=========================================
+      ELSE
+C---------------------------------------------
+C-----Recherche du début de cette sous-section
+C---------------------------------------------
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 51 )
+     $   .NE. 'Cas "muVT+charges" : spécification directe des mu_i' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+        DO I = 1 , 3
+         READ ( 10 , * )
+        END DO
+C----------------------------------------------------------------
+C-----mu(2) (eV) et éventuellement mu(3) (si ternaire intrinsèque)
+C----------------------------------------------------------------
+       IF ( N_TYP_INTR .EQ. 2 ) THEN
+         READ ( 10 , * ) POT_2
+       ELSE
+         READ ( 10 , * ) POT_2 , POT_3
+       END IF
+       IF ( N_TYP_INTR .LT. N_TYP ) THEN
+        READ ( 10 , * )
+     $ ( POT_I_INIT ( I ) , I = N_TYP_INTR + 1 , N_TYP )
+       END IF
+C===============================================================
+C===============================================================
+C=====Fin de test pour "muVT+balayage" (en l'absence de charges)
+C=====ou "muVT+point" (avec DP chargés)
+C===============================================================
+C===============================================================
+       END IF
+C-----Fin du test de type "muVT"
+      END IF
+C##############################################
+C#####Fin de la lecture de la section
+C#####"PARAMETRES SPECIFIQUES A UN CALCUL muVT"
+C##############################################
+C###################################################
+C#####PARAMETRES SPECIFIQUES A UN CALCUL NPT
+C#####Champs lus et utilisés seulement si calcul NPT
+C###################################################
+C-----Test "mode NPT ?" pour la lecture de cette grande section
+      IF
+     $ ( INDIC_TYP_CALC ( 1 : LONG_INDIC_TYP_CALC ) .EQ. 'NPT' )
+     $ THEN
+C---------------------------------------------
+C-----Recherche de l'en-tête de grande section
+C---------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 43 )
+     $   .NE. 'PARAMETRES SPECIFIQUES A UN CALCUL NPT' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C-------------------------------------------------
+C-------------------------------------------------
+C-----Valeurs extrémales du domaine de température
+C----- --> champs utilisés en NPT(T/Tx/xT)
+C-------------------------------------------------
+C-------------------------------------------------
+        IF (          INDIC_TYP_CALC_NPT
+     $              ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. "T"
+     $           .OR. INDIC_TYP_CALC_NPT 
+     $              ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. "Tx"
+     $           .OR. INDIC_TYP_CALC_NPT
+     $              ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. "xT"
+     $     ) THEN
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 1 : 44 )
+     $   .NE. "Valeurs extrémales du domaine de température" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------
+C-----Lecture
+C------------
+        READ ( 10 , 1 )
+        READ ( 10 , * ) T_INIT , T_FIN
+C-----Test préliminaire 1
+        IF ( T_INIT .LT. 0.D0
+     $  .OR. T_FIN .LT. 0.D0 ) THEN
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+          WRITE ( * , * )
+     $ 'Domaine de température en NPT(T/Tx/xT) :'
+          WRITE ( * , * )
+     $ ' choisir T_min > 0 et T_max > 0'
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+        CALL INTERRUPTION
+        END IF
+C-----Test préliminaire 2
+        IF ( T_INIT .LT. T_FIN ) THEN
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+          WRITE ( * , * )
+     $ 'Domaine de température en NPT(T) :'
+          WRITE ( * , * )
+     $ ' veuillez choisir T_init > T_fin'
+          WRITE ( * , * )
+     $ ' (convergence très sensible aux valeurs initiales sinon).'
+          WRITE ( * , * )
+     $ '---------------------------------------------------------'
+        CALL INTERRUPTION
+        END IF
+C---------------------------
+C-----Fin du test "NPT(T) ?"
+C---------------------------
+       END IF
+C==========================================
+C==========================================
+C=====Mode NPT : paramètres de l'algorithme
+C=====toujours lus en NPT (p, x ou T)
+C==========================================
+C==========================================
+C-------------------------------------------
+C-----Recherche de l'en-tête de sous-section
+C-------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 17 : 56 )
+     $   .NE. "Sous-section NPT relative à l'algorithme" )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C-----Lecture séquentielle des champs (pas de recherche d'en-tête)
+C-----dans cette sous-section
+C--------------------------------------------------------------------
+C-----Nombre maximal d'itérations pour l'algorithme de Newton-Raphson
+C--------------------------------------------------------------------
+        READ ( 10 , 4 )
+        READ ( 10 , * ) N_ITER_MAX_NPT
+C---------------------------------------------------------------------
+C-----Précision requise pour l'arrêt de l'algorithme de Newton-Raphson
+C-----(maximum des valeurs absolues
+C-----des composantes de l'écart entre deux pas)
+C---------------------------------------------------------------------
+        READ ( 10 , 5 )
+        READ ( 10 , * ) PRECISION_NPT
+C-----------------------------------------------------------------
+C-----Fréquence (nombre de pas) de calcul de la matrice jacobienne
+C-----------------------------------------------------------------
+        READ ( 10 , 4 )
+        READ ( 10 , * ) P_J_NPT
+C----------------------------------------
+C-----Valeur du paramètre alpha dans NRCG
+C----------------------------------------
+        READ ( 10 , 4 )
+        READ ( 10 , * ) ALPHA_NRCG_NPT
+C----------------------------------------------------------------------
+C-----NRCG :
+C----- 1) indicateur à l'étape préliminaire pour "élimination de x_1<0"
+C-----= 1 si réduction du pas suivant les seules composantes x_1(i)<0,
+C-----= 2 si réduction de toutes les composantes du pas
+C----- 2) valeur du coefficient de réduction
+C----------------------------------------------------------------------
+        READ ( 10 , 7 )
+        READ ( 10 , * ) INDIC_TYPE_REDUC_NRCG_NPT , COEF_REDUC_NRCG_NPT
+C--------------------------------------------------------------------
+C-----Valeur minimale "lambda_min" pour la réduction du pas dans NRCG
+C--------------------------------------------------------------------
+        READ ( 10 , 4 )
+        READ ( 10 , * ) VALEUR_LAMBDA_MIN_NRCG_NPT
+C=================================
+C=================================
+C=====Mode NPT : valeurs initiales
+C=================================
+C=================================
+C---------------------------------------------------------
+C-----La variable "nombre de mailles" est initialisée à 1,
+C-----car sa valeur ne joue pas sur la résolution
+C-----(inconnues = variables intensives).
+C---------------------------------------------------------
+         N_MAILLES_INIT = 1.D0
+C-----------------------------------------------------
+C-----Ouverture du tableau des valeurs initiales de DP
+C-----------------------------------------------------
+      ALLOCATE ( LOG_X_D_R_INIT ( 0 : N_TYP , N_R ) )
+C-------------------------------------------
+C-----Recherche de l'en-tête de sous-section
+C-------------------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 12 : 58 )
+     $   .NE. 'Sous-section NPT relative aux valeurs initiales' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C-----Lecture séquentielle (pas de recherche d'en-tête)
+C-----pour le champ suivant, qui est lu dans tous les cas NPT,
+C-----i.e. NPT(p), NPT(x/Tx/xT) et NPT(T)
+        READ ( 10 , 4 )
+        READ ( 10 , * ) INDIC_LECT_VAL_INIT_NPT
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+C- - -Test de compatibilité : la lecture des valeurs initiales
+C- - -dans un fichier n'est possible que pour NPT(x/Tx/xT)
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+        IF (
+     $                   INDIC_LECT_VAL_INIT_NPT .EQ. 1
+     $             .AND. INDIC_TYP_CALC_NPT
+     $                 ( 1 : LONG_INDIC_TYP_CALC_NPT ) .NE. "x"
+     $             .AND. INDIC_TYP_CALC_NPT
+     $                 ( 1 : LONG_INDIC_TYP_CALC_NPT ) .NE. "Tx"
+     $             .AND. INDIC_TYP_CALC_NPT
+     $                 ( 1 : LONG_INDIC_TYP_CALC_NPT ) .NE. "xT"
+     $    ) THEN
+         write ( * , * ) "Lecture des valeurs initiales dans un fichier"
+         write ( * , * ) "possible seulement en mode NPT(x/Tx/xT)"
+         stop
+        END IF
+C----------------------------------------------------------------------
+C-----Cas "NPT(xT) et indic. lect. val. init. fich. = 0" :
+C-----indicateur de réinitialisation des variables NPT
+C-----par les valeurs "DATA.adpi" à chaque début d'itération externe,
+C-----i.e. entre les boucles externe (x) et interne (T)
+C-----Valeur 1 : les valeurs "DATA.adpi" sont utilisées
+C-----à chaque incrément de x, avant le début de la boucle en T,
+C-----à l'intérieur de laquelle les val. init. sont affectées
+C-----proche en proche "PeP" de (x_n,T_p) à (x_n,T_p+1)
+C-----Valeur 0 : les valeurs "DATA.adpi" sont utilisées seulement
+C-----avant le début des boucles, puis l'affectation se fait toujours
+C-----en mode "PeP", même au changement de composition (x_n,T_P) ->
+C----- (x_n+1,T_1) (N et P étant les nombres de pas en x et T (resp.).
+C-----Remarque : ce champ n'est lu (et ne doit donc être inclus en mode
+C-----NPT(xT)), que si n'est pas sélectionnée ci-dessus l'option
+C-----"lect. val. init. dans fich.", cette option prenant alors
+C-----le pas sur les valeurs "DATA.adpi", et étant utilisée
+C-----à chaque changement de x, avant le début de la boucle sur T
+C-----(c'est-à-dire avec la même fréquence que les valeurs "DATA.adpi"
+C-----lorsque le champ présent vaut 1).
+C----------------------------------------------------------------------
+        IF ( INDIC_TYP_CALC_NPT
+     $     ( 1 : LONG_INDIC_TYP_CALC_NPT ) .EQ. "xT" ) THEN
+C-----L'indicateur est préalablement initialisé, pour le cas où
+C-----"lect. val. init. fich." i.e. INDIC_LECT_VAL_INIT_NPT = 1
+C-----(puisque dans ce cas, la lecture ci-dessous n'a pas lieu).
+C-----(Cette initialisation n'est peut-être pas nécessaire,
+C-----mais elle est tout de même faite "par précaution").
+         IF ( INDIC_LECT_VAL_INIT_NPT .EQ. 0 ) THEN
+C-----Recherche de l'en-tête
+         REWIND ( 10 )
+         CHAINE_LECT = ''
+         DO WHILE ( CHAINE_LECT ( 1 : 50 )
+     $    .NE. 'Cas "NPT(xT) et indic. lect. val. init. fich. = 0"' )
+           READ ( 10 , '(A)' ) CHAINE_LECT
+         END DO
+C-----Lecture
+          READ ( 10 , 16 )
+          READ ( 10 , * ) INDIC_LECT_VAL_INIT_XT
+C-----Si "lect. val. init. fich." i.e. INDIC_LECT_VAL_INIT_NPT = 1,
+C-----l'indicateur est tout de même initialisé,
+C-----puisque dans ce cas, la lecture ci-dessus n'a pas lieu.
+C-----(Cette initialisation n'est peut-être pas nécessaire,
+C-----mais elle est tout de même faite "par précaution").
+         ELSE
+           INDIC_LECT_VAL_INIT_XT = 0
+         END IF
+        END IF
+C---------------------------------------------------------------
+C---------------------------------------------------------------
+C-----1) Cas de lecture dans un fichier de valeurs initiales :
+C-----cette lecture est effectuée seulement en mode NPT(x/Tx/xT),
+C-----en raison du test précédent (sinon, le programme s'arrête)
+C---------------------------------------------------------------
+C---------------------------------------------------------------
+        IF ( INDIC_LECT_VAL_INIT_NPT .EQ. 1 ) THEN
+C- - -D'après la remarque ci-dessus, on se trouve forcément ici
+C- - -dans l'un des cas NPT(x/Tx/xT).
+C-----Recherche de l'en-tête
+         REWIND ( 10 )
+         CHAINE_LECT = ''
+         DO WHILE ( CHAINE_LECT ( 1 : 35 )
+     $    .NE. 'Nom du fichier de valeurs initiales' )
+           READ ( 10 , '(A)' ) CHAINE_LECT
+         END DO
+C-----Lecture séquentielle (pas de recherche d'en-tête intermédiaire)
+C-----du nom de ce fichier et de son nombre de lignes
+         READ ( 10 , '(A)' ) CHAINE_LECT
+         READ ( 10 , '(A)' ) FICH_VAL_INIT
+          LONG_FICH_VAL_INIT
+     $  = INDEX ( FICH_VAL_INIT , ' ' ) - 1
+         READ ( 10 , 4 )
+         READ ( 10 , * ) N_LIGNES_FICH_VAL_INIT
+C- - -Test sur la cohérence entre la longueur du fichier
+C- - -et le nombre de pas en composition :
+C- - - le nombre de pas et le nombre de lignes
+C- - -doivent être multiples ou sous-multiples l'un de l'autre.
+C- - -D'après la remarque ci-dessus, on se trouve forcément ici
+C- - -dans l'un des cas NPT(x/Tx/xT)
+C- - - ==> c'est N_PAS_X_TYP_0 lu qui est utilisé
+          IF ( MOD ( N_LIGNES_FICH_VAL_INIT ,
+     $               N_PAS_X_TYP_0 ) .NE. 0
+     $   .AND. MOD ( N_PAS_X_TYP_0 ,
+     $               N_LIGNES_FICH_VAL_INIT ) .NE. 0 ) THEN
+         write(*,*)
+     $   "Calcul NPT avec valeurs initiales lues dans un fichier :"
+         write(*,*)
+     $  "   -> veuillez choisir N_pas et N_lignes tels que"
+         write(*,*)
+     $  "      mod(N_pas;N_lignes) ou mod(N_lignes;N_pas) = 0"
+         write(*,*)
+         stop
+         END IF
+C-------------------------------------------------------------
+C-------------------------------------------------------------
+C-----2) Cas de lecture des valeurs initiales dans DATA.adpi :
+C-----a lieu aussi bien en NPT(p) que NPT(x) ou NPT(T)
+C-------------------------------------------------------------
+C-------------------------------------------------------------
+      ELSE
+C-----Recherche de l'en-tête
+         REWIND ( 10 )
+         CHAINE_LECT = ''
+         DO WHILE ( CHAINE_LECT ( 1 : 30 )
+     $     .NE. 'log_10 des quantités initiales' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+         END DO
+C--------------------------------------------------------------
+C-----"log_10 des quantités initiales", partie 1/3 :
+C-----lecture des quantités initiales d'antisites et de lacunes
+C--------------------------------------------------------------
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+C- - -Lecture "synthétique" (adaptée à N types intrinsèques)
+C- - -des valeurs initiales pour les antisites
+C- - -des diverses espèces intrinsèques sur les divers sous-réseaux
+C- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+       DO I_TYP = 1 , N_TYP_INTR
+         DO J_TYP = 1 , N_TYP_INTR
+          IF ( J_TYP .NE. I_TYP ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( LOG_X_D_R_INIT ( J_TYP , I_R ) ,
+     $     I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP ) )
+C-----Test pour éviter des valeurs initiales aberrantes
+C-----(induit erreur dans l'algorithme de résolution)
+           do I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP )
+            if ( LOG_X_D_R_INIT ( J_TYP , I_R ) .GE. 0.D0 ) then
+             write(*,*)
+             write(*,*)
+     $      "Valeurs initiales en NPT : choisir Log(x_DP) < 0"
+             write(*,*)
+             stop
+            end if
+           end do
+          END IF
+        END DO
+       END DO
+C- - - - - - - - - - - - - - - - - - - - - - -
+C- - -Lacunes L(r) (pour r <= rho(N_TYP_INTR))
+C- - - - - - - - - - - - - - - - - - - - - - -
+      READ ( 10 , 2 )
+      READ ( 10 , * )
+     $ ( LOG_X_D_R_INIT ( 0 , I_R ) , I_R = 1 , RHO_N ( N_TYP_INTR ) )
+         do I_R = 1 , RHO_N ( N_TYP_INTR )
+          if ( LOG_X_D_R_INIT ( 0 , I_R ) .GE. 0.D0 ) then
+            write(*,*)
+            write(*,*)
+     $     "Valeurs initiales en NPT : choisir Log(x_DP) < 0"
+            write(*,*)
+            stop
+           end if
+          end do
+C-------------------------------------------------
+C-----"log_10 des quantités initiales", partie 2/3 :
+C-----lecture optionnelle des  quantités initiales
+C-----relatives aux interstitiels intrinsèques
+C-------------------------------------------------
+      IF ( ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' )
+     $ .AND. ( INDIC_INTER_INTR .EQ. 'O'
+     $    .OR. INDIC_INTER_INTR .EQ. 'o' ) )
+     $ THEN
+       DO I_TYP_INTR = 1 , N_TYP_INTR
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( LOG_X_D_R_INIT ( I_TYP_INTR , I_R ) ,
+     $   I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+          do I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R 
+           if ( LOG_X_D_R_INIT ( I_TYP_INTR , I_R ) .GE. 0.D0 ) then
+             write(*,*)
+             write(*,*)
+     $      "Valeurs initiales en NPT : choisir Log(x_DP) < 0"
+             write(*,*)
+             stop
+            end if
+           end do
+       END DO
+      END IF
+C----------------------------------------------------------------------
+C-----"log_10 des quantités initiales", partie 3/3 :
+C-----lecture optionnelle des quantités initiales d'éléments d'addition
+C-----(substitutionnels et interstitiels)
+C----------------------------------------------------------------------
+      DO I_TYP = N_TYP_INTR + 1 , N_TYP
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $   ( LOG_X_D_R_INIT ( I_TYP , I_R ) ,
+     $     I_R = 1 , RHO_N ( N_TYP_INTR ) )
+          do I_R = 1 , RHO_N ( N_TYP_INTR )
+           if ( LOG_X_D_R_INIT ( I_TYP , I_R ) .GE. 0.D0 ) then
+             write(*,*)
+             write(*,*)
+     $      "Valeurs initiales en NPT : choisir Log(x_DP) < 0"
+             write(*,*)
+             stop
+            end if
+           end do
+C- - - - - - - - - - - - - - - - - - - - - - - -
+C- - -Cas de présence d'interstitiels d'addition
+C- - - - - - - - - - - - - - - - - - - - - - - -
+        IF ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( LOG_X_D_R_INIT ( I_TYP , I_R ) ,
+     $     I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+          do I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R 
+           if ( LOG_X_D_R_INIT ( I_TYP , I_R ) .GE. 0.D0 ) then
+             write(*,*)
+             write(*,*)
+     $      "Valeurs initiales en NPT : choisir Log(x_DP) < 0"
+             write(*,*)
+             stop
+            end if
+           end do
+         END IF
+      END DO
+C-----------------------------------------
+C-----Lecture du nombre de mailles initial
+C-----------------------------------------
+C     CHAINE_LECT = ''
+C     DO WHILE ( CHAINE_LECT ( 1 : 25 )
+C    $     .NE. 'Nombre de mailles initial' )
+C       READ ( 10 , '(A)' ) CHAINE_LECT
+C     END DO
+C     READ ( 10 , '(A)' ) CHAINE_LECT
+C     READ ( 10 , * ) N_MAILLES_INIT
+C--------------------------------------------
+C--------------------------------------------
+C-----Fin du test sur INDIC_LECT_VAL_INIT_NPT
+C--------------------------------------------
+C--------------------------------------------
+       END IF
+C=====================================
+C=====================================
+C=====Fin de la lecture optionnelle
+C=====des valeurs initiales (mode NPT)
+C=====================================
+C=====================================
+C-----"Fin du test "mode NPT ?" pour la lecture de cette grande section
+      END IF
+C#############################################
+C#####Fin de la lecture de la section
+C#####"PARAMETRES SPECIFIQUES A UN CALCUL NPT"
+C#############################################
+C#######################################################
+C#####PARAMETRES RELATIFS A LA SUPERCELLULE DE REFERENCE
+C#######################################################
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 47 )
+     $ .NE. 'PARAMETRES DE LA SUPERCELLULE DE REFERENCE' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C--------------------------------------------------------
+C-----Energie de référence de la cellule sans défaut (eV)
+C--------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) E_REF
+C------------------------------------------------------------
+C-----Volume de référence de la cellule sans défaut (A * * 3)
+C------------------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) V_REF
+C---------------------------------------------------
+C-----Nombre de mailles contenues dans cette cellule
+C---------------------------------------------------
+      READ ( 10 , 4 )
+      READ ( 10 , * ) N_MAILLE_REF
+C#########################################################
+C#####Fin de lecture de la section
+C#####"PARAMETRES RELATIFS A LA SUPERCELLULE DE REFERENCE"
+C#########################################################
+C######################################################
+C#####     Lecture des paramètres de SC des DP
+C======================================================
+C#####CAS DE DP NON CHARGES : DP simples (et complexes)
+C======================================================
+C######################################################
+C-----Test "DP non chargés ?"
+      IF ( INDIC_CHARGE .EQ. 0 ) THEN
+C###################################################
+C#####PARAMETRES RELATIFS AUX DP SIMPLES NON CHARGES
+C###################################################
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 59 )
+     $ .NE. 'PARAMETRES DES SUPERCELLULES DE DP SIMPLES NON CHARGES' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C-------------------------------------------------------
+C-----Ouverture des tableaux
+C-----d'énergies "brutes" des cellules avec défauts (eV)
+C-----et de même taille que la cellule de référence
+C-----et énergies GC correspondantes
+C-------------------------------------------------------
+      ALLOCATE ( E_B_D_R ( 0 : N_TYP , N_R ) )
+      ALLOCATE ( E_GC_D_R ( 0 : N_TYP , N_R ) )
+C-------------------------------------
+C-----Mêmes quantités pour les volumes
+C-------------------------------------
+      ALLOCATE ( V_B_D_R ( 0 : N_TYP , N_R ) )
+      ALLOCATE ( V_GC_D_R ( 0 : N_TYP , N_R ) )
+C----------------------------------------------------------
+C-----Enthalpies GC des défauts sur les divers sous-réseaux
+C----------------------------------------------------------
+      ALLOCATE ( H_GC_D_R ( 0 : N_TYP , N_R ) )
+C---------------------------------------------------------------
+C-----Enthalpies de formation des DP sur les divers sous-réseaux
+C---------------------------------------------------------------
+      ALLOCATE ( H_FORM_D_R ( 0 : N_TYP , N_R ) )
+C--------------------------------------
+C-----Termes complémentaires d'entropie
+C--------------------------------------
+      ALLOCATE ( Z_TYP_R ( N_R ) )
+C-----------------------------------------------------------
+C-----Initialisation des énergies et volumes de supercellule
+C-----------------------------------------------------------
+      E_B_D_R = 0.D0
+      V_B_D_R = 0.D0
+C===================================================
+C=====Lecture des énergies des cellules avec défauts
+C===================================================
+      CHAINE_LECT = ''
+      DO WHILE ( CHAINE_LECT ( 1 : 17 ) .NE. 'Energies "brutes"' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+      DO I = 1 , 2
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+C------------------------------------------------------------
+C------------------------------------------------------------
+C-----Partie 1/3 : 
+C-----lecture des énergies "brutes" d'antisites et de lacunes
+C------------------------------------------------------------
+C------------------------------------------------------------
+C---------------------------------------------------------------
+C-----Lecture "synthétique" (adaptée à N types intrinsèques)
+C-----des énergies d'antisites des diverses espèces intrinsèques
+C----- sur les divers sous-réseaux
+C---------------------------------------------------------------
+       DO I_TYP = 1 , N_TYP_INTR
+         DO J_TYP = 1 , N_TYP_INTR
+          IF ( J_TYP .NE. I_TYP ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( E_B_D_R ( J_TYP , I_R ) ,
+     $     I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP ) )
+          END IF
+        END DO
+       END DO
+C-------------
+C-----Ecriture
+C-------------
+C      DO I_TYP = 1 , N_TYP_INTR
+C        DO J_TYP = 1 , N_TYP_INTR
+C         IF ( J_TYP .NE. I_TYP ) THEN
+C           write ( * , * )
+C    $   ( E_B_D_R ( J_TYP , I_R ) ,
+C    $     I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP ) )
+C         END IF
+C       END DO
+C      END DO
+C---------------------------------------------
+C-----Lacunes L(r) (pour r <= rho(N_TYP_INTR))
+C---------------------------------------------
+      READ ( 10 , 2 )
+      READ ( 10 , * )
+     $ ( E_B_D_R ( 0 , I_R ) , I_R = 1 , RHO_N ( N_TYP_INTR ) )
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+C-----Partie 2/3 :
+C-----lecture optionnelle des énergies d'interstitiels intrinsèques
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+      IF ( ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' )
+     $ .AND. ( INDIC_INTER_INTR .EQ. 'O'
+     $    .OR. INDIC_INTER_INTR .EQ. 'o' ) )
+     $ THEN
+       DO I_TYP_INTR = 1 , N_TYP_INTR 
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( E_B_D_R ( I_TYP_INTR , I_R ) ,
+     $   I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+       END DO
+      END IF
+C-----------------------------------------------------------
+C-----------------------------------------------------------
+C-----Partie 3/3 :
+C-----lecture optionnelle des énergies d'éléments d'addition
+C-----(substitutionnels et interstitiels)
+C-----------------------------------------------------------
+C-----------------------------------------------------------
+      DO I_TYP = N_TYP_INTR + 1 , N_TYP
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $   ( E_B_D_R ( I_TYP , I_R ) , I_R = 1 , RHO_N ( N_TYP_INTR ) )
+C-----------------------------------------------
+C-----Cas de présence d'interstitiels d'addition
+C-----------------------------------------------
+        IF ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( E_B_D_R ( I_TYP , I_R ) ,
+     $     I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+        END IF
+      END DO
+C==================================================
+C=====Lecture des volumes des cellules avec défauts
+C==================================================
+      CHAINE_LECT = ''
+      DO WHILE ( CHAINE_LECT ( 1 : 15 ) .NE. 'Volumes "bruts"' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+      DO I = 1 , 2
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+C----------------------------------------------------------
+C----------------------------------------------------------
+C-----Partie 1/3 :
+C-----lecture des volumes "bruts" d'antisites et de lacunes
+C----------------------------------------------------------
+C----------------------------------------------------------
+C--------------------------------------------------------------
+C-----Lecture "synthétique" (adaptée à N types intrinsèques)
+C-----des volumes d'antisites des diverses espèces intrinsèques
+C----- sur les divers sous-réseaux
+C--------------------------------------------------------------
+       DO I_TYP = 1 , N_TYP_INTR
+         DO J_TYP = 1 , N_TYP_INTR
+          IF ( J_TYP .NE. I_TYP ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( V_B_D_R ( J_TYP , I_R ) ,
+     $     I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP ) )
+          END IF
+        END DO
+       END DO
+C---------------------------------------------
+C-----Lacunes L(r) (pour r <= rho(N_TYP_INTR))
+C---------------------------------------------
+      READ ( 10 , 2 )
+      READ ( 10 , * )
+     $ ( V_B_D_R ( 0 , I_R ) , I_R = 1 , RHO_N ( N_TYP_INTR ) )
+C-----------------------------------------------------------------
+C-----------------------------------------------------------------
+C-----Partie 2/3 :
+C-----lecture optionnelle des volumes d'interstitiels intrinsèques
+C-----------------------------------------------------------------
+C-----------------------------------------------------------------
+      IF ( ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' )
+     $ .AND. ( INDIC_INTER_INTR .EQ. 'O'
+     $    .OR. INDIC_INTER_INTR .EQ. 'o' ) )
+     $ THEN
+       DO I_TYP_INTR = 1 , N_TYP_INTR
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( V_B_D_R ( I_TYP_INTR , I_R ) ,
+     $   I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+       END DO
+      END IF
+C----------------------------------------------------------
+C----------------------------------------------------------
+C-----Partie 3/3 :
+C-----Lecture optionnelle des volumes d'éléments d'addition
+C-----(substitutionnels et interstitiels)
+C----------------------------------------------------------
+C----------------------------------------------------------
+      DO I_TYP = N_TYP_INTR + 1 , N_TYP
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $   ( V_B_D_R ( I_TYP , I_R ) , I_R = 1 , RHO_N ( N_TYP_INTR ) )
+C-----------------------------------------------
+C-----Cas de présence d'interstitiels d'addition
+C-----------------------------------------------
+        IF ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' ) THEN
+           READ ( 10 , 2 )
+           READ ( 10 , * )
+     $   ( V_B_D_R ( I_TYP , I_R ) ,
+     $     I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R )
+         END IF
+      END DO
+C#####################################################
+C#####Fin de lecture optionnelle de la section
+C#####"PARAMETRES RELATIFS AUX DP SIMPLES NON CHARGES"
+C#####################################################
+C###########################################################
+C#####PARAMETRES RELATIFS AUX DP COMPLEXES NON CHARGES
+C#####(lecture optionnelle ou simple allocation pour G_ADPI)
+C###########################################################
+       IF ( INDIC_COMPLEXES .EQ. 'O' .OR. INDIC_COMPLEXES .EQ. 'o' )
+     $ THEN
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 46 )
+     $ .NE. 'PARAMETRES RELATIFS AUX DEFAUTS COMPLEXES' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C------------------------------------------
+C-----Nombre maximum de sites des complexes
+C------------------------------------------
+       READ ( 10 , 4 )
+       READ ( 10 , * ) N_SITES_COMPLEXES_MAX
+C--------------------------------------------------------
+C-----Nombre de types de défauts complexes pris en compte
+C--------------------------------------------------------
+       READ ( 10 , 4 )
+       READ ( 10 , * ) N_TYPES_COMPLEXES
+C--------------------------------------------------
+C-----Ouverture des tableaux relatifs aux complexes
+C-----dont les valeurs vont être lues
+C--------------------------------------------------
+       ALLOCATE ( MULTIPLICITE_COMPLEXE ( N_TYPES_COMPLEXES ) )
+       ALLOCATE ( I_S_R_MULTIPLICITE_COMPLEXE ( N_TYPES_COMPLEXES ) )
+       ALLOCATE ( NOMBRE_SITES_COMPLEXE ( N_TYPES_COMPLEXES ) )
+       ALLOCATE ( I_S_R_COMPLEXE
+     $          ( N_TYPES_COMPLEXES , N_SITES_COMPLEXES_MAX ) )
+       ALLOCATE ( I_TYPE_COMPLEXE
+     $          ( N_TYPES_COMPLEXES , N_SITES_COMPLEXES_MAX ) )
+       ALLOCATE ( E_B_D_COMPLEXE ( N_TYPES_COMPLEXES ) )
+       ALLOCATE ( V_B_D_COMPLEXE ( N_TYPES_COMPLEXES ) )
+C-----------------------------------
+C-----Positionnement dans le fichier
+C-----------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 35 )
+     $ .NE. 'Caractéristiques des complexes' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C--------------------------------------
+C-----Boucle sur les types de complexes 
+C--------------------------------------
+       DO I_COMPLEXE = 1 , N_TYPES_COMPLEXES
+        READ ( 10 , 5 )
+        READ ( 10 , * ) I_COMPLEXE_VERIF ,
+     $                  MULTIPLICITE_COMPLEXE ( I_COMPLEXE ) ,
+     $                  I_S_R_MULTIPLICITE_COMPLEXE ( I_COMPLEXE ) ,
+     $                  NOMBRE_SITES_COMPLEXE ( I_COMPLEXE )
+        IF ( I_COMPLEXE_VERIF .NE. I_COMPLEXE ) THEN
+         WRITE ( * , * ) '--------------------------------'
+         WRITE ( * , * ) 'Numéroter les complexes de 1 à N'
+         WRITE ( * , * ) '--------------------------------'
+         CALL INTERRUPTION
+        END IF
+        READ ( 10 , 2 )
+        READ ( 10 , * )
+     $ ( I_S_R_COMPLEXE ( I_COMPLEXE , I_SITE ) , 
+     $   I_SITE = 1 , NOMBRE_SITES_COMPLEXE ( I_COMPLEXE ) )
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( I_TYPE_COMPLEXE ( I_COMPLEXE , I_SITE ) ,
+     $   I_SITE = 1 , NOMBRE_SITES_COMPLEXE ( I_COMPLEXE ) )           
+         READ ( 10 , 4 )
+         READ ( 10 , * )
+     $   E_B_D_COMPLEXE ( I_COMPLEXE ) ,
+     $   V_B_D_COMPLEXE ( I_COMPLEXE )
+       END DO
+C--------------------------------------------------------------
+C-----Fin de la lecture optionnelle des paramètres de complexes
+C--------------------------------------------------------------
+      ELSE
+C----------------------------------------------------------------
+C-----Sinon, allocation de tableaux passés en paramètres à G_ADPI
+C----------------------------------------------------------------
+        N_TYPES_COMPLEXES = 0
+        ALLOCATE ( MULTIPLICITE_COMPLEXE ( N_TYPES_COMPLEXES ) )
+        ALLOCATE ( I_S_R_MULTIPLICITE_COMPLEXE ( N_TYPES_COMPLEXES ) )
+       END IF
+C#######################################################
+C#####Fin de lecture optionnelle de la section
+C#####"PARAMETRES RELATIFS AUX DP COMPLEXES NON CHARGES"
+C#######################################################
+C##################################################
+C#####     Lecture des paramètres de SC des DP
+C==================================================
+C#####CAS DE DP CHARGES : DP simples (et complexes)
+C==================================================
+C##################################################
+      ELSE
+C=========================================
+C=========================================
+C=====Première partie : DP simples chargés
+C=========================================
+C=========================================
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 47 )
+     $   .NE. 'PARAMETRES RELATIFS AUX DP SIMPLES CHARGES' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C--------------------------------------------------------------
+C-----Recherche de la section des paramètres (GC) de DP chargés
+C--------------------------------------------------------------
+      CHAINE_LECT = ''
+      DO WHILE ( CHAINE_LECT ( 1 : 21 )
+     $  .NE. 'Pour chaque DP chargé' )
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO
+      DO I = 1 , 3
+        READ ( 10 , '(A)' ) CHAINE_LECT
+      END DO    
+C===========================================
+C=====Ouverture des tableaux pour DP chargés
+C===========================================
+C-------------------------------------------------------
+C-----Tableau des nombres d'états de charges pour les DP
+C-------------------------------------------------------
+      ALLOCATE ( NQ_D_R_Q ( 0 : N_TYP , N_R ) )
+C-------------------
+C-----Charges des DP
+C-------------------
+      ALLOCATE ( Q_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+C--------------------------------------------------
+C-----Energies "brutes" des cellules DP chargés
+C-----et de même taille que la cellule de référence
+C-----et énergies GC correspondantes
+C--------------------------------------------------
+      ALLOCATE ( E_B_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+      ALLOCATE ( E_GC_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+C-------------------------------------
+C-----Mêmes quantités pour les volumes
+C-------------------------------------
+      ALLOCATE ( V_B_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+      ALLOCATE ( V_GC_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+C----------------------------------------------------------
+C-----Enthalpies GC des défauts sur les divers sous-réseaux
+C----------------------------------------------------------
+      ALLOCATE ( H_GC_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+C---------------------------------------------------------------
+C-----Enthalpies de formation des DP sur les divers sous-réseaux
+C---------------------------------------------------------------
+      ALLOCATE ( H_FORM_D_R_Q ( N_MAX_CHARGES , 0 : N_TYP , N_R ) )
+C-------------------------------------------------------
+C-----Initialisation à 0 des paramètres de DP chargés
+C-----(inutile pour le calcul, mais permet d'identifier
+C-----les triplets (i_q,i_typ,i_r) non affectés à un DP)
+C-------------------------------------------------------
+      NQ_D_R_Q = 0
+      E_B_D_R_Q = 0.D0
+      V_B_D_R_Q = 0.D0
+      Q_B_D_R_Q = 0.D0
+C=====================================================
+C=====Lecture des paramètres des cellules avec défauts
+C=====================================================
+C------------------------------------------------------------
+C------------------------------------------------------------
+C-----Partie 1/3 : 
+C-----lecture des paramètres d'antisites et de lacunes
+C------------------------------------------------------------
+C------------------------------------------------------------
+C---------------------------------------------------------------
+C-----Lecture "synthétique" (adaptée à N types intrinsèques)
+C-----des énergies d'antisites des diverses espèces intrinsèques
+C----- sur les divers sous-réseaux
+C---------------------------------------------------------------
+       DO I_TYP = 1 , N_TYP_INTR
+         DO J_TYP = 1 , N_TYP_INTR
+          IF ( J_TYP .NE. I_TYP ) THEN
+           READ ( 10 , 2 )
+           DO I_R = RHO_N ( I_TYP - 1 ) + 1 , RHO_N ( I_TYP )
+            READ ( 10 , * ) NQ_D_R_Q ( J_TYP , I_R )
+C            write ( * , * ) J_TYP , I_R , NQ_D_R_Q ( J_TYP , I_R )
+            DO I_Q = 1 , NQ_D_R_Q ( J_TYP , I_R )
+           READ ( 10 , * )
+     $   Q_D_R_Q ( I_Q , J_TYP , I_R ) ,
+     $   E_B_D_R_Q ( I_Q , J_TYP , I_R ) ,
+     $   V_B_D_R_Q ( I_Q , J_TYP , I_R )
+          END DO
+         END DO
+           END IF
+          END DO
+      END DO
+C---------------------------------------------
+C-----Lacunes L(r) (pour r <= rho(N_TYP_INTR))
+C---------------------------------------------
+      READ ( 10 , 2 )
+      DO I_R = 1 , RHO_N ( N_TYP_INTR )
+         READ ( 10 , * ) NQ_D_R_Q ( 0 , I_R )
+         DO I_Q = 1 , NQ_D_R_Q ( 0 , I_R )
+          READ ( 10 , * )
+     $   Q_D_R_Q ( I_Q , 0 , I_R ) ,
+     $   E_B_D_R_Q ( I_Q , 0 , I_R ) ,
+     $   V_B_D_R_Q ( I_Q , 0 , I_R )
+         END DO
+      END DO
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+C-----Partie 2/3 :
+C-----lecture optionnelle des énergies d'interstitiels intrinsèques
+C------------------------------------------------------------------
+C------------------------------------------------------------------
+      IF ( ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' )
+     $ .AND. ( INDIC_INTER_INTR .EQ. 'O'
+     $    .OR. INDIC_INTER_INTR .EQ. 'o' ) )
+     $ THEN
+       DO I_TYP_INTR = 1 , N_TYP_INTR
+         READ ( 10 , 2 )
+         DO I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R
+          READ ( 10 , * ) NQ_D_R_Q ( I_TYP_INTR , I_R )
+          DO I_Q = 1 , NQ_D_R_Q ( I_TYP_INTR , I_R )
+           READ ( 10 , * )
+     $   Q_D_R_Q ( I_Q , I_TYP_INTR , I_R ) ,
+     $   E_B_D_R_Q ( I_Q , I_TYP_INTR , I_R ) ,
+     $   V_B_D_R_Q ( I_Q , I_TYP_INTR , I_R )
+         END DO
+        END DO
+       END DO
+      END IF
+C-----------------------------------------------------------
+C-----------------------------------------------------------
+C-----Partie 3/3 :
+C-----lecture optionnelle des énergies d'éléments d'addition
+C-----(substitutionnels et interstitiels)
+C-----------------------------------------------------------
+C-----------------------------------------------------------
+      DO I_TYP = N_TYP_INTR + 1 , N_TYP
+         READ ( 10 , 2 )
+         DO I_R = 1 , RHO_N ( N_TYP_INTR )
+          READ ( 10 , * ) NQ_D_R_Q ( I_TYP , I_R )
+          DO I_Q = 1 , NQ_D_R_Q ( I_TYP , I_R )
+           READ ( 10 , * )
+     $     Q_D_R_Q ( I_Q , I_TYP , I_R ) ,
+     $     E_B_D_R_Q ( I_Q , I_TYP , I_R ) ,
+     $     V_B_D_R_Q ( I_Q , I_TYP , I_R )
+          END DO
+         END DO
+C-----------------------------------------------
+C-----Cas de présence d'interstitiels d'addition
+C-----------------------------------------------
+        IF ( INDIC_R_INTER .EQ. 'O' .OR. INDIC_R_INTER .EQ. 'o' ) THEN
+           READ ( 10 , 2 )
+         DO I_R = 1 + RHO_N ( N_TYP_INTR ) , N_R
+          READ ( 10 , * ) NQ_D_R_Q ( I_TYP , I_R )
+          DO I_Q = 1 , NQ_D_R_Q ( I_TYP , I_R )
+           READ ( 10 , * )
+     $     Q_D_R_Q ( I_Q , I_TYP , I_R ) ,
+     $     E_B_D_R_Q ( I_Q , I_TYP , I_R ) ,
+     $     V_B_D_R_Q ( I_Q , I_TYP , I_R )
+           END DO
+          END DO
+        END IF
+C---------------------------------------------
+C---------------------------------------------
+C-----Fin de boucle sur les types (partie 3/3)
+C---------------------------------------------
+C---------------------------------------------
+      END DO
+C===========================================
+C===========================================
+C=====Deuxième partie : DP complexes chargés
+C=====(optionnelle)
+C===========================================
+C===========================================
+        IF ( INDIC_COMPLEXES_Q .EQ. 'O'
+     $  .OR. INDIC_COMPLEXES_Q .EQ. 'o' )
+     $ THEN
+C---------------------------
+C-----Recherche de l'en-tête
+C---------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 6 : 54 )
+     $ .NE. 'PARAMETRES RELATIFS AUX DEFAUTS COMPLEXES CHARGES' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C--------------------------------------------------
+C-----Nombre maximum de sites des complexes chargés
+C--------------------------------------------------
+       READ ( 10 , 5 )
+       READ ( 10 , * ) N_MAX_SITES_COMPLEXES_Q
+C----------------------------------------------------------------
+C-----Nombre de types de défauts complexes chargés pris en compte
+C----------------------------------------------------------------
+       READ ( 10 , 4 )
+       READ ( 10 , * ) N_TYPES_COMPLEXES_Q
+C----------------------------------------------------------
+C-----Ouverture des tableaux relatifs aux complexes chargés
+C-----dont les valeurs vont être lues
+C----------------------------------------------------------
+       ALLOCATE ( NQ_COMPLEXE_Q ( N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( Q_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                            N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( MULTIPLICITE_COMPLEXE_Q ( N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE
+     $ ( I_S_R_MULTIPLICITE_COMPLEXE_Q ( N_TYPES_COMPLEXES_Q ) )        
+       ALLOCATE ( NOMBRE_SITES_COMPLEXE_Q ( N_TYPES_COMPLEXES_Q ) )     
+       ALLOCATE ( I_S_R_COMPLEXE_Q
+     $          ( N_TYPES_COMPLEXES_Q , N_MAX_SITES_COMPLEXES_Q ) )
+       ALLOCATE ( I_TYPE_COMPLEXE_Q
+     $          ( N_TYPES_COMPLEXES_Q , N_MAX_SITES_COMPLEXES_Q ) )
+       ALLOCATE ( E_B_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( V_B_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( E_GC_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( V_GC_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( H_GC_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( H_FORM_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                               N_TYPES_COMPLEXES_Q ) )
+       ALLOCATE ( X_COMPLEXE_Q ( N_MAX_CHARGES ,
+     $                           N_TYPES_COMPLEXES_Q ) )
+C-----------------------------------
+C-----Positionnement dans le fichier
+C-----------------------------------
+        REWIND ( 10 )
+        CHAINE_LECT = ''
+        DO WHILE ( CHAINE_LECT ( 17 : 54 )
+     $ .NE. 'Caractéristiques des complexes chargés' )
+          READ ( 10 , '(A)' ) CHAINE_LECT
+        END DO
+C----------------------------------------------
+C-----Boucle sur les types de complexes chargés
+C----------------------------------------------
+       DO I_COMPLEXE_Q = 1 , N_TYPES_COMPLEXES_Q
+         READ ( 10 , 5 )
+         READ ( 10 , * ) I_COMPLEXE_Q_VERIF ,
+     $                   MULTIPLICITE_COMPLEXE_Q ( I_COMPLEXE_Q ) ,
+     $           I_S_R_MULTIPLICITE_COMPLEXE_Q ( I_COMPLEXE_Q ) ,       
+     $                   NOMBRE_SITES_COMPLEXE_Q ( I_COMPLEXE_Q )
+         write ( * , * ) I_COMPLEXE_Q_VERIF ,
+     $                   MULTIPLICITE_COMPLEXE_Q ( I_COMPLEXE_Q ) ,
+     $           I_S_R_MULTIPLICITE_COMPLEXE_Q ( I_COMPLEXE_Q ) ,       
+     $                   NOMBRE_SITES_COMPLEXE_Q ( I_COMPLEXE_Q )
+         IF ( I_COMPLEXE_Q_VERIF .NE. I_COMPLEXE_Q ) THEN
+          WRITE ( * , * ) '----------------------------------------'
+          WRITE ( * , * ) 'Numéroter les complexes chargés de 1 à N'
+          WRITE ( * , * ) '----------------------------------------'
+          CALL INTERRUPTION
+         END IF
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( I_S_R_COMPLEXE_Q ( I_COMPLEXE_Q , I_SITE ) ,
+     $   I_SITE = 1 , NOMBRE_SITES_COMPLEXE_Q ( I_COMPLEXE_Q ) )  
+         READ ( 10 , 2 )
+         READ ( 10 , * )
+     $ ( I_TYPE_COMPLEXE_Q ( I_COMPLEXE_Q , I_SITE ) ,
+     $   I_SITE = 1 , NOMBRE_SITES_COMPLEXE_Q ( I_COMPLEXE_Q ) )   
+         READ ( 10 , 4 )
+C-----Lecture des énergies et volumes "bruts" pour chaque état de charge
+        READ ( 10 , * ) NQ_COMPLEXE_Q ( I_COMPLEXE_Q )
+        DO I_Q = 1 , NQ_COMPLEXE_Q ( I_COMPLEXE_Q )
+         READ ( 10 , * )
+     $   Q_COMPLEXE_Q ( I_Q , I_COMPLEXE_Q ) ,
+     $   E_B_COMPLEXE_Q ( I_Q , I_COMPLEXE_Q ) ,
+     $   V_B_COMPLEXE_Q ( I_Q , I_COMPLEXE_Q )
+        END DO
+C-----Fin de boucle sur complexes chargés
+       END DO   
+C----------------------------------------------------------------------
+C-----Fin de la lecture optionnelle des paramètres de complexes chargés
+C----------------------------------------------------------------------
+       END IF
+C-----Fin du test "DP non chargés ?"
+C-----(conditionne le choix des blocs de données lus)
+      END IF
+C##################################################
+C##### Fin de lecture des paramètres de SC des DP
+C==================================================
+C#####     CAS DE DP NON CHARGES OU CHARGES
+C==================================================
+C#####        DP simples (et complexes)
+C##################################################
+C############################################
+C############################################
+C#####Fin de la lecture du fichier de données
+C############################################
+C############################################
+C##############################################################
